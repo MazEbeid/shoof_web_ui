@@ -136,21 +136,30 @@ extension AggregationTypeExtension on AggregationType {
 // =============================================================================
 
 /// Available Supabase views/tables for data queries
+/// Available Supabase data sources for widgets
+/// These map directly to existing tables/views in Supabase
 enum DataSourceView {
+  /// Raw submission data - main table
   submissionAnswers,
+
+  /// Individual price observations
   priceObservations,
+
+  /// Daily aggregated prices by product/city
   dailyPrices,
-  weeklyPrices,
-  monthlyPrices,
-  dayPatterns,
+
+  /// Price change alerts (increases/decreases)
   priceAlerts,
+
+  /// High-level KPI summary per client
   kpiSummary,
-  yesNoResponses,
-  checklistResponses,
-  locationData,
+
+  /// Statistics grouped by input type
+  inputTypeStats,
 }
 
 extension DataSourceViewExtension on DataSourceView {
+  /// The actual Supabase table/view name
   String get value {
     switch (this) {
       case DataSourceView.submissionAnswers:
@@ -159,81 +168,53 @@ extension DataSourceViewExtension on DataSourceView {
         return 'v_price_observations';
       case DataSourceView.dailyPrices:
         return 'v_daily_prices';
-      case DataSourceView.weeklyPrices:
-        return 'v_weekly_prices';
-      case DataSourceView.monthlyPrices:
-        return 'v_monthly_prices';
-      case DataSourceView.dayPatterns:
-        return 'v_day_patterns';
       case DataSourceView.priceAlerts:
         return 'v_price_alerts';
       case DataSourceView.kpiSummary:
         return 'v_kpi_summary';
-      case DataSourceView.yesNoResponses:
-        return 'v_yes_no_responses';
-      case DataSourceView.checklistResponses:
-        return 'v_checklist_responses';
-      case DataSourceView.locationData:
-        return 'v_location_data';
+      case DataSourceView.inputTypeStats:
+        return 'v_input_type_stats';
     }
   }
 
+  /// Human-readable label for the UI
   String get label {
     switch (this) {
       case DataSourceView.submissionAnswers:
-        return 'Raw Answers';
+        return 'Submission Answers (Raw)';
       case DataSourceView.priceObservations:
         return 'Price Observations';
       case DataSourceView.dailyPrices:
         return 'Daily Prices';
-      case DataSourceView.weeklyPrices:
-        return 'Weekly Prices';
-      case DataSourceView.monthlyPrices:
-        return 'Monthly Prices';
-      case DataSourceView.dayPatterns:
-        return 'Day Patterns';
       case DataSourceView.priceAlerts:
         return 'Price Alerts';
       case DataSourceView.kpiSummary:
         return 'KPI Summary';
-      case DataSourceView.yesNoResponses:
-        return 'Yes/No Responses';
-      case DataSourceView.checklistResponses:
-        return 'Checklist Responses';
-      case DataSourceView.locationData:
-        return 'Location Data';
+      case DataSourceView.inputTypeStats:
+        return 'Input Type Stats';
     }
   }
 
+  /// Brief description of what this data source contains
   String get description {
     switch (this) {
       case DataSourceView.submissionAnswers:
-        return 'All raw submission answers';
+        return 'Raw submission data with all fields';
       case DataSourceView.priceObservations:
-        return 'Price and availability data per SKU';
+        return 'Individual price points with product/location';
       case DataSourceView.dailyPrices:
-        return 'Daily aggregated prices with DoD change';
-      case DataSourceView.weeklyPrices:
-        return 'Weekly aggregated prices with WoW change';
-      case DataSourceView.monthlyPrices:
-        return 'Monthly aggregated prices with MoM change';
-      case DataSourceView.dayPatterns:
-        return 'Day-of-week patterns and volatility';
+        return 'Daily avg/min/max prices by product & city';
       case DataSourceView.priceAlerts:
-        return 'Significant price changes (>5%)';
+        return 'Price changes flagged as increases/decreases';
       case DataSourceView.kpiSummary:
-        return 'High-level KPIs per client';
-      case DataSourceView.yesNoResponses:
-        return 'Yes/No question responses';
-      case DataSourceView.checklistResponses:
-        return 'Multi-select checklist responses';
-      case DataSourceView.locationData:
-        return 'Geographic/location data';
+        return 'Aggregated KPIs (observations, products, cities)';
+      case DataSourceView.inputTypeStats:
+        return 'Count of responses by input type';
     }
   }
 
-  /// Common fields available in this view
-  List<String> get commonFields {
+  /// Common fields available in this data source (based on actual schema)
+  List<String> get availableFields {
     switch (this) {
       case DataSourceView.submissionAnswers:
         return [
@@ -245,13 +226,15 @@ extension DataSourceViewExtension on DataSourceView {
           'city',
           'channel',
           'observed_date',
+          'answer_value',
+          'node',
         ];
       case DataSourceView.priceObservations:
         return [
-          'product_name',
+          'client_id',
+          'mission_id',
           'product_name_ar',
           'brand_owner',
-          'brand_name',
           'size',
           'packaging',
           'price',
@@ -262,97 +245,59 @@ extension DataSourceViewExtension on DataSourceView {
         ];
       case DataSourceView.dailyPrices:
         return [
+          'client_id',
+          'mission_id',
           'product_name_ar',
           'brand_owner',
           'size',
+          'packaging',
           'city',
           'channel',
           'observed_date',
           'avg_price',
           'min_price',
           'max_price',
+          'available_count',
+          'total_observations',
           'availability_pct',
+          'dod_change',
           'dod_pct',
-        ];
-      case DataSourceView.weeklyPrices:
-        return [
-          'product_name_ar',
-          'brand_owner',
-          'city',
-          'week_number',
-          'avg_price',
-          'availability_pct',
-          'wow_pct',
-        ];
-      case DataSourceView.monthlyPrices:
-        return [
-          'product_name_ar',
-          'brand_owner',
-          'city',
-          'month',
-          'month_name',
-          'avg_price',
-          'availability_pct',
-          'mom_pct',
-        ];
-      case DataSourceView.dayPatterns:
-        return [
-          'product_name_ar',
-          'brand_owner',
-          'day_of_week',
-          'day_name',
-          'avg_price',
-          'price_volatility',
-          'availability_pct',
         ];
       case DataSourceView.priceAlerts:
         return [
+          'client_id',
+          'mission_id',
           'product_name_ar',
           'brand_owner',
           'city',
           'channel',
           'observed_date',
           'avg_price',
+          'dod_change',
           'dod_pct',
           'alert_type',
         ];
       case DataSourceView.kpiSummary:
         return [
           'client_id',
+          'first_observation',
+          'last_observation',
           'days_tracked',
           'total_observations',
+          'missions_count',
           'products_tracked',
           'cities_covered',
+          'locations_visited',
           'overall_availability_pct',
           'overall_avg_price',
         ];
-      case DataSourceView.yesNoResponses:
+      case DataSourceView.inputTypeStats:
         return [
-          'question',
-          'node',
-          'city',
-          'channel',
-          'response',
-          'observed_date',
-        ];
-      case DataSourceView.checklistResponses:
-        return [
-          'question',
-          'node',
-          'city',
-          'channel',
-          'selected_option',
-          'observed_date',
-        ];
-      case DataSourceView.locationData:
-        return [
-          'city',
-          'region',
-          'channel',
-          'location_name',
-          'lat',
-          'lng',
-          'what3words',
+          'client_id',
+          'input_type',
+          'count',
+          'first_seen',
+          'last_seen',
         ];
     }
   }
