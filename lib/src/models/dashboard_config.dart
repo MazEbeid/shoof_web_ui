@@ -11,6 +11,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Supported widget types for dashboards
 enum WidgetType {
+  missionOverview, // Special: shows visits, cities, channels + filters
   counter,
   pie,
   bar,
@@ -22,6 +23,8 @@ enum WidgetType {
 extension WidgetTypeExtension on WidgetType {
   String get value {
     switch (this) {
+      case WidgetType.missionOverview:
+        return 'mission_overview';
       case WidgetType.counter:
         return 'counter';
       case WidgetType.pie:
@@ -39,6 +42,8 @@ extension WidgetTypeExtension on WidgetType {
 
   String get label {
     switch (this) {
+      case WidgetType.missionOverview:
+        return 'Mission Overview';
       case WidgetType.counter:
         return 'Counter';
       case WidgetType.pie:
@@ -56,6 +61,8 @@ extension WidgetTypeExtension on WidgetType {
 
   String get icon {
     switch (this) {
+      case WidgetType.missionOverview:
+        return 'dashboard';
       case WidgetType.counter:
         return 'numbers';
       case WidgetType.pie:
@@ -68,6 +75,25 @@ extension WidgetTypeExtension on WidgetType {
         return 'table_chart';
       case WidgetType.heatmap:
         return 'grid_on';
+    }
+  }
+
+  String get description {
+    switch (this) {
+      case WidgetType.missionOverview:
+        return 'Shows visits, cities, channels with date/city/channel filters';
+      case WidgetType.counter:
+        return 'Single number display';
+      case WidgetType.pie:
+        return 'Distribution breakdown';
+      case WidgetType.bar:
+        return 'Category comparison';
+      case WidgetType.line:
+        return 'Trend over time';
+      case WidgetType.table:
+        return 'Detailed data rows';
+      case WidgetType.heatmap:
+        return 'Density visualization';
     }
   }
 
@@ -852,6 +878,21 @@ class WidgetConfig {
         position: position ?? this.position,
         dataSource: dataSource ?? this.dataSource,
         display: display ?? this.display,
+      );
+
+  /// Create a default mission overview widget (visits, cities, channels + filters)
+  factory WidgetConfig.defaultMissionOverview() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'mission_overview',
+        title: 'Mission Overview',
+        titleAr: 'نظرة عامة على المهمة',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 2), // Full width
+        dataSource: const DataSourceConfig(
+          view: 'v_mission_overview',
+        ),
+        display: const DisplayConfig(
+          color: '#1976D2',
+        ),
       );
 
   /// Create a default counter widget
