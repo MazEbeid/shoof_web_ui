@@ -1022,6 +1022,21 @@ class WidgetConfig {
           colors: ['#FFCDD2', '#FFF9C4', '#C8E6C9'],
         ),
       );
+
+  /// Create a default coverage map widget
+  factory WidgetConfig.defaultCoverageMap() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'coverage_map',
+        title: 'Coverage Map',
+        titleAr: 'خريطة التغطية',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 3),
+        dataSource: const DataSourceConfig(
+          view: 'submission_answers',
+        ),
+        display: const DisplayConfig(
+          color: '#1976D2',
+        ),
+      );
 }
 
 // =============================================================================
