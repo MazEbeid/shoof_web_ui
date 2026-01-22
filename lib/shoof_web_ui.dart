@@ -20,6 +20,7 @@ export 'src/theme/admin_theme.dart';
 // Common Widgets
 export 'src/widgets/admin_card.dart';
 export 'src/widgets/admin_stat_card.dart';
+export 'src/widgets/admin_date_range_picker.dart';
 export 'src/widgets/admin_dialog.dart';
 export 'src/widgets/admin_status_badge.dart';
 export 'src/widgets/admin_action_buttons.dart';
