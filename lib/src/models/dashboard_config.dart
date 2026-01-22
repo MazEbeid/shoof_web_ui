@@ -139,23 +139,45 @@ extension AggregationTypeExtension on AggregationType {
 /// Available Supabase data sources for widgets
 /// These map directly to existing tables/views in Supabase
 enum DataSourceView {
-  /// Raw submission data - main table
+  // ============ RAW DATA ============
+  /// Raw submission data - main table with all input types
   submissionAnswers,
 
-  /// Individual price observations
+  // ============ PRICE & AVAILABILITY ============
+  /// Individual price/availability observations per SKU
   priceObservations,
 
-  /// Daily aggregated prices by product/city
+  /// Daily aggregated prices with day-over-day change
   dailyPrices,
 
-  /// Price change alerts (increases/decreases)
+  /// Weekly aggregated prices with week-over-week change
+  weeklyPrices,
+
+  /// Monthly aggregated prices with month-over-month change
+  monthlyPrices,
+
+  /// Day-of-week price patterns and volatility
+  dayPatterns,
+
+  /// Significant price changes (>5% increase/decrease)
   priceAlerts,
 
+  // ============ AGGREGATES ============
   /// High-level KPI summary per client
   kpiSummary,
 
   /// Statistics grouped by input type
   inputTypeStats,
+
+  // ============ OTHER INPUT TYPES ============
+  /// Yes/No question responses
+  yesNoResponses,
+
+  /// Checklist/multi-select responses
+  checklistResponses,
+
+  /// Geographic/location data
+  locationData,
 }
 
 extension DataSourceViewExtension on DataSourceView {
@@ -168,12 +190,24 @@ extension DataSourceViewExtension on DataSourceView {
         return 'v_price_observations';
       case DataSourceView.dailyPrices:
         return 'v_daily_prices';
+      case DataSourceView.weeklyPrices:
+        return 'v_weekly_prices';
+      case DataSourceView.monthlyPrices:
+        return 'v_monthly_prices';
+      case DataSourceView.dayPatterns:
+        return 'v_day_patterns';
       case DataSourceView.priceAlerts:
         return 'v_price_alerts';
       case DataSourceView.kpiSummary:
         return 'v_kpi_summary';
       case DataSourceView.inputTypeStats:
         return 'v_input_type_stats';
+      case DataSourceView.yesNoResponses:
+        return 'v_yes_no_responses';
+      case DataSourceView.checklistResponses:
+        return 'v_checklist_responses';
+      case DataSourceView.locationData:
+        return 'v_location_data';
     }
   }
 
@@ -181,17 +215,29 @@ extension DataSourceViewExtension on DataSourceView {
   String get label {
     switch (this) {
       case DataSourceView.submissionAnswers:
-        return 'Submission Answers (Raw)';
+        return 'Raw Answers';
       case DataSourceView.priceObservations:
         return 'Price Observations';
       case DataSourceView.dailyPrices:
         return 'Daily Prices';
+      case DataSourceView.weeklyPrices:
+        return 'Weekly Prices';
+      case DataSourceView.monthlyPrices:
+        return 'Monthly Prices';
+      case DataSourceView.dayPatterns:
+        return 'Day Patterns';
       case DataSourceView.priceAlerts:
         return 'Price Alerts';
       case DataSourceView.kpiSummary:
         return 'KPI Summary';
       case DataSourceView.inputTypeStats:
         return 'Input Type Stats';
+      case DataSourceView.yesNoResponses:
+        return 'Yes/No Responses';
+      case DataSourceView.checklistResponses:
+        return 'Checklist Responses';
+      case DataSourceView.locationData:
+        return 'Location Data';
     }
   }
 
@@ -201,15 +247,49 @@ extension DataSourceViewExtension on DataSourceView {
       case DataSourceView.submissionAnswers:
         return 'Raw submission data with all fields';
       case DataSourceView.priceObservations:
-        return 'Individual price points with product/location';
+        return 'Per-SKU price & availability';
       case DataSourceView.dailyPrices:
-        return 'Daily avg/min/max prices by product & city';
+        return 'Daily avg/min/max with DoD change';
+      case DataSourceView.weeklyPrices:
+        return 'Weekly aggregates with WoW change';
+      case DataSourceView.monthlyPrices:
+        return 'Monthly aggregates with MoM change';
+      case DataSourceView.dayPatterns:
+        return 'Day-of-week patterns & volatility';
       case DataSourceView.priceAlerts:
-        return 'Price changes flagged as increases/decreases';
+        return 'Price changes >5%';
       case DataSourceView.kpiSummary:
-        return 'Aggregated KPIs (observations, products, cities)';
+        return 'High-level KPIs per client';
       case DataSourceView.inputTypeStats:
-        return 'Count of responses by input type';
+        return 'Answer counts by input type';
+      case DataSourceView.yesNoResponses:
+        return 'Yes/No question responses';
+      case DataSourceView.checklistResponses:
+        return 'Multi-select checklist responses';
+      case DataSourceView.locationData:
+        return 'GPS & location data';
+    }
+  }
+
+  /// Category for grouping in UI
+  String get category {
+    switch (this) {
+      case DataSourceView.submissionAnswers:
+        return 'Raw Data';
+      case DataSourceView.priceObservations:
+      case DataSourceView.dailyPrices:
+      case DataSourceView.weeklyPrices:
+      case DataSourceView.monthlyPrices:
+      case DataSourceView.dayPatterns:
+      case DataSourceView.priceAlerts:
+        return 'Price & Availability';
+      case DataSourceView.kpiSummary:
+      case DataSourceView.inputTypeStats:
+        return 'Aggregates';
+      case DataSourceView.yesNoResponses:
+      case DataSourceView.checklistResponses:
+      case DataSourceView.locationData:
+        return 'Other Input Types';
     }
   }
 
@@ -218,29 +298,37 @@ extension DataSourceViewExtension on DataSourceView {
     switch (this) {
       case DataSourceView.submissionAnswers:
         return [
-          'id',
           'client_id',
           'mission_id',
+          'submission_id',
           'input_type',
           'question',
+          'node',
+          'value_text',
+          'value_number',
+          'value_bool',
           'city',
           'channel',
+          'location_name',
           'observed_date',
-          'answer_value',
-          'node',
+          'crowd_id',
+          'qa_status',
         ];
       case DataSourceView.priceObservations:
         return [
           'client_id',
           'mission_id',
           'product_name_ar',
+          'product_name',
           'brand_owner',
+          'brand_name',
           'size',
           'packaging',
           'price',
           'is_available',
           'city',
           'channel',
+          'location_name',
           'observed_date',
         ];
       case DataSourceView.dailyPrices:
@@ -262,6 +350,48 @@ extension DataSourceViewExtension on DataSourceView {
           'availability_pct',
           'dod_change',
           'dod_pct',
+        ];
+      case DataSourceView.weeklyPrices:
+        return [
+          'client_id',
+          'product_name_ar',
+          'brand_owner',
+          'size',
+          'city',
+          'year',
+          'week_number',
+          'week_start',
+          'avg_price',
+          'observations',
+          'availability_pct',
+          'wow_pct',
+        ];
+      case DataSourceView.monthlyPrices:
+        return [
+          'client_id',
+          'product_name_ar',
+          'brand_owner',
+          'size',
+          'city',
+          'year',
+          'month',
+          'month_name',
+          'avg_price',
+          'observations',
+          'availability_pct',
+          'mom_pct',
+        ];
+      case DataSourceView.dayPatterns:
+        return [
+          'client_id',
+          'product_name_ar',
+          'brand_owner',
+          'day_of_week',
+          'day_name',
+          'avg_price',
+          'price_volatility',
+          'availability_pct',
+          'observations',
         ];
       case DataSourceView.priceAlerts:
         return [
@@ -298,6 +428,42 @@ extension DataSourceViewExtension on DataSourceView {
           'count',
           'first_seen',
           'last_seen',
+        ];
+      case DataSourceView.yesNoResponses:
+        return [
+          'client_id',
+          'mission_id',
+          'question',
+          'node',
+          'city',
+          'channel',
+          'location_name',
+          'observed_date',
+          'response',
+        ];
+      case DataSourceView.checklistResponses:
+        return [
+          'client_id',
+          'mission_id',
+          'question',
+          'node',
+          'city',
+          'channel',
+          'observed_date',
+          'selected_option',
+        ];
+      case DataSourceView.locationData:
+        return [
+          'client_id',
+          'mission_id',
+          'city',
+          'region',
+          'channel',
+          'location_name',
+          'lat',
+          'lng',
+          'what3words',
+          'observed_date',
         ];
     }
   }
