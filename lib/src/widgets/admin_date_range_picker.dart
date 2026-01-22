@@ -526,13 +526,14 @@ class _AdminDateRangePickerState extends State<AdminDateRangePicker> {
             onTap: _toggleDropdown,
             borderRadius: AdminRadius.smAll,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              height: 48, // Match DropdownButton height
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
                 color: AdminColors.surface,
                 borderRadius: AdminRadius.smAll,
                 border: Border.all(
                   color: _isOpen ? AdminColors.primary : AdminColors.divider,
-                  width: _isOpen ? 2 : 1,
+                  width: 1,
                 ),
               ),
               child: Row(
