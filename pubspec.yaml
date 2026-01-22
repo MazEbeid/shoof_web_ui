@@ -1,0 +1,35 @@
+name: shoof_web_ui
+description: Shared UI components for Shoof web applications (Admin, Insights)
+version: 1.0.0
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  google_fonts: ^6.1.0
+  flutter_hooks: ">=0.20.5 <1.0.0"
+  hooks_riverpod: ">=2.4.9 <3.0.0"
+  another_flushbar: ^1.12.30
+  cloud_firestore: ^5.5.0
+
+dev_dependencies:
+  flutter_lints: ^3.0.1
+
+flutter:
+  fonts:
+    - family: NeoSans
+      fonts:
+        - asset: fonts/Neo Sans Arabic Regular.ttf
+        - asset: fonts/NeoSansArabicLight.ttf
+          weight: 300
+        - asset: fonts/NeoSansArabicMedium.ttf
+          weight: 500
+        - asset: fonts/NeoSansArabicBold.ttf
+          weight: 700
+        - asset: fonts/NeoSansArabicBlack.ttf
+          weight: 900
+
