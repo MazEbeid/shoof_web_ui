@@ -162,6 +162,19 @@ enum DataSourceView {
   /// Significant price changes (>5% increase/decrease)
   priceAlerts,
 
+  // ============ MISSION OVERVIEW ============
+  /// Mission-level submission counts and coverage
+  missionOverview,
+
+  /// Daily submission counts for trend charts
+  missionDailyStats,
+
+  /// Submissions grouped by city
+  missionCityStats,
+
+  /// Submissions grouped by location type
+  missionLocationTypeStats,
+
   // ============ AGGREGATES ============
   /// High-level KPI summary per client
   kpiSummary,
@@ -198,6 +211,14 @@ extension DataSourceViewExtension on DataSourceView {
         return 'v_day_patterns';
       case DataSourceView.priceAlerts:
         return 'v_price_alerts';
+      case DataSourceView.missionOverview:
+        return 'v_mission_overview';
+      case DataSourceView.missionDailyStats:
+        return 'v_mission_daily_stats';
+      case DataSourceView.missionCityStats:
+        return 'v_mission_city_stats';
+      case DataSourceView.missionLocationTypeStats:
+        return 'v_mission_location_type_stats';
       case DataSourceView.kpiSummary:
         return 'v_kpi_summary';
       case DataSourceView.inputTypeStats:
@@ -228,6 +249,14 @@ extension DataSourceViewExtension on DataSourceView {
         return 'Day Patterns';
       case DataSourceView.priceAlerts:
         return 'Price Alerts';
+      case DataSourceView.missionOverview:
+        return 'Mission Overview';
+      case DataSourceView.missionDailyStats:
+        return 'Daily Submissions';
+      case DataSourceView.missionCityStats:
+        return 'Submissions by City';
+      case DataSourceView.missionLocationTypeStats:
+        return 'Submissions by Location Type';
       case DataSourceView.kpiSummary:
         return 'KPI Summary';
       case DataSourceView.inputTypeStats:
@@ -258,6 +287,14 @@ extension DataSourceViewExtension on DataSourceView {
         return 'Day-of-week patterns & volatility';
       case DataSourceView.priceAlerts:
         return 'Price changes >5%';
+      case DataSourceView.missionOverview:
+        return 'Total submissions, coverage, date range';
+      case DataSourceView.missionDailyStats:
+        return 'Submissions per day for trends';
+      case DataSourceView.missionCityStats:
+        return 'Submissions grouped by city';
+      case DataSourceView.missionLocationTypeStats:
+        return 'Submissions by channel/location type';
       case DataSourceView.kpiSummary:
         return 'High-level KPIs per client';
       case DataSourceView.inputTypeStats:
@@ -283,6 +320,11 @@ extension DataSourceViewExtension on DataSourceView {
       case DataSourceView.dayPatterns:
       case DataSourceView.priceAlerts:
         return 'Price & Availability';
+      case DataSourceView.missionOverview:
+      case DataSourceView.missionDailyStats:
+      case DataSourceView.missionCityStats:
+      case DataSourceView.missionLocationTypeStats:
+        return 'Mission Stats';
       case DataSourceView.kpiSummary:
       case DataSourceView.inputTypeStats:
         return 'Aggregates';
@@ -406,6 +448,53 @@ extension DataSourceViewExtension on DataSourceView {
           'dod_change',
           'dod_pct',
           'alert_type',
+        ];
+      case DataSourceView.missionOverview:
+        return [
+          'client_id',
+          'mission_id',
+          'total_submissions',
+          'total_answers',
+          'cities_count',
+          'location_types_count',
+          'locations_count',
+          'collectors_count',
+          'first_submission',
+          'last_submission',
+          'days_active',
+        ];
+      case DataSourceView.missionDailyStats:
+        return [
+          'client_id',
+          'mission_id',
+          'observed_date',
+          'submissions',
+          'answers',
+          'cities',
+          'collectors',
+        ];
+      case DataSourceView.missionCityStats:
+        return [
+          'client_id',
+          'mission_id',
+          'city',
+          'submissions',
+          'answers',
+          'locations',
+          'collectors',
+          'first_date',
+          'last_date',
+        ];
+      case DataSourceView.missionLocationTypeStats:
+        return [
+          'client_id',
+          'mission_id',
+          'location_type',
+          'submissions',
+          'answers',
+          'cities',
+          'locations',
+          'collectors',
         ];
       case DataSourceView.kpiSummary:
         return [
