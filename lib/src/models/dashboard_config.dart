@@ -18,6 +18,7 @@ enum WidgetType {
   line,
   table,
   heatmap,
+  coverageMap, // Map with clusters + heatmap toggle
 }
 
 extension WidgetTypeExtension on WidgetType {
@@ -37,6 +38,8 @@ extension WidgetTypeExtension on WidgetType {
         return 'table';
       case WidgetType.heatmap:
         return 'heatmap';
+      case WidgetType.coverageMap:
+        return 'coverage_map';
     }
   }
 
@@ -56,6 +59,8 @@ extension WidgetTypeExtension on WidgetType {
         return 'Data Table';
       case WidgetType.heatmap:
         return 'Heatmap';
+      case WidgetType.coverageMap:
+        return 'Coverage Map';
     }
   }
 
@@ -75,6 +80,8 @@ extension WidgetTypeExtension on WidgetType {
         return 'table_chart';
       case WidgetType.heatmap:
         return 'grid_on';
+      case WidgetType.coverageMap:
+        return 'map';
     }
   }
 
@@ -94,6 +101,8 @@ extension WidgetTypeExtension on WidgetType {
         return 'Detailed data rows';
       case WidgetType.heatmap:
         return 'Density visualization';
+      case WidgetType.coverageMap:
+        return 'Geographic coverage with clusters & heatmap';
     }
   }
 
