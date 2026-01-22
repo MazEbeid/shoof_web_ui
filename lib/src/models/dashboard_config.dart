@@ -753,6 +753,8 @@ class WidgetPosition {
 class DisplayConfig {
   final String? icon; // Material icon name
   final String color; // Hex color
+  final String? subtitle; // Custom subtitle text (leave empty to hide)
+  final String? subtitleAr; // Arabic subtitle
   final bool showTrend; // Show trend indicator
   final String? trendPeriod; // 'day', 'week', 'month'
   final List<String>? colors; // Color palette for charts
@@ -763,6 +765,8 @@ class DisplayConfig {
   const DisplayConfig({
     this.icon,
     this.color = '#2196F3',
+    this.subtitle,
+    this.subtitleAr,
     this.showTrend = false,
     this.trendPeriod,
     this.colors,
@@ -774,6 +778,8 @@ class DisplayConfig {
   Map<String, dynamic> toMap() => {
         if (icon != null) 'icon': icon,
         'color': color,
+        if (subtitle != null) 'subtitle': subtitle,
+        if (subtitleAr != null) 'subtitleAr': subtitleAr,
         'showTrend': showTrend,
         if (trendPeriod != null) 'trendPeriod': trendPeriod,
         if (colors != null) 'colors': colors,
@@ -785,6 +791,8 @@ class DisplayConfig {
   factory DisplayConfig.fromMap(Map<String, dynamic> map) => DisplayConfig(
         icon: map['icon'],
         color: map['color'] ?? '#2196F3',
+        subtitle: map['subtitle'],
+        subtitleAr: map['subtitleAr'],
         showTrend: map['showTrend'] ?? false,
         trendPeriod: map['trendPeriod'],
         colors: (map['colors'] as List<dynamic>?)?.cast<String>(),
@@ -796,6 +804,8 @@ class DisplayConfig {
   DisplayConfig copyWith({
     String? icon,
     String? color,
+    String? subtitle,
+    String? subtitleAr,
     bool? showTrend,
     String? trendPeriod,
     List<String>? colors,
@@ -806,6 +816,8 @@ class DisplayConfig {
       DisplayConfig(
         icon: icon ?? this.icon,
         color: color ?? this.color,
+        subtitle: subtitle ?? this.subtitle,
+        subtitleAr: subtitleAr ?? this.subtitleAr,
         showTrend: showTrend ?? this.showTrend,
         trendPeriod: trendPeriod ?? this.trendPeriod,
         colors: colors ?? this.colors,
