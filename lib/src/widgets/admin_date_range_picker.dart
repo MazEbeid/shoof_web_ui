@@ -94,6 +94,58 @@ class _AdminDateRangePickerState extends State<AdminDateRangePicker> {
     _closeDropdown();
   }
 
+  /// Check if the current selection matches a quick option
+  int? _getMatchingQuickOption() {
+    if (_tempStart == null || _tempEnd == null) return -99; // All time
+    
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    
+    // Today
+    if (_isSameDay(_tempStart!, today) && _isSameDay(_tempEnd!, today)) {
+      return 0;
+    }
+    
+    // Yesterday
+    final yesterday = today.subtract(const Duration(days: 1));
+    if (_isSameDay(_tempStart!, yesterday) && _isSameDay(_tempEnd!, yesterday)) {
+      return 1;
+    }
+    
+    // Last 7 days
+    final last7 = today.subtract(const Duration(days: 6));
+    if (_isSameDay(_tempStart!, last7) && _isSameDay(_tempEnd!, today)) {
+      return 7;
+    }
+    
+    // Last 30 days
+    final last30 = today.subtract(const Duration(days: 29));
+    if (_isSameDay(_tempStart!, last30) && _isSameDay(_tempEnd!, today)) {
+      return 30;
+    }
+    
+    // Last 90 days
+    final last90 = today.subtract(const Duration(days: 89));
+    if (_isSameDay(_tempStart!, last90) && _isSameDay(_tempEnd!, today)) {
+      return 90;
+    }
+    
+    // This month
+    final thisMonthStart = DateTime(now.year, now.month, 1);
+    if (_isSameDay(_tempStart!, thisMonthStart) && _isSameDay(_tempEnd!, today)) {
+      return -1;
+    }
+    
+    // Last month
+    final lastMonthStart = DateTime(now.year, now.month - 1, 1);
+    final lastMonthEnd = DateTime(now.year, now.month, 0);
+    if (_isSameDay(_tempStart!, lastMonthStart) && _isSameDay(_tempEnd!, lastMonthEnd)) {
+      return -2;
+    }
+    
+    return null; // Custom range
+  }
+
   void _selectQuickOption(int days) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -206,10 +258,14 @@ class _AdminDateRangePickerState extends State<AdminDateRangePicker> {
                               ),
                             ),
                             const SizedBox(height: AdminSpacing.sm),
-                            ..._quickOptions.map((option) => _QuickOptionButton(
-                              label: option.$1,
-                              onTap: () => _selectQuickOption(option.$2),
-                            )),
+                            ..._quickOptions.map((option) {
+                              final isSelected = _getMatchingQuickOption() == option.$2;
+                              return _QuickOptionButton(
+                                label: option.$1,
+                                isSelected: isSelected,
+                                onTap: () => _selectQuickOption(option.$2),
+                              );
+                            }),
                           ],
                         ),
                       ),
@@ -387,10 +443,60 @@ class _AdminDateRangePickerState extends State<AdminDateRangePicker> {
   }
 
   String get _displayText {
-    if (widget.startDate != null && widget.endDate != null) {
-      return '${_formatDate(widget.startDate!)} - ${_formatDate(widget.endDate!)}';
+    if (widget.startDate == null || widget.endDate == null) {
+      return widget.placeholder;
     }
-    return widget.placeholder;
+    
+    // Check if it matches a quick option
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final start = widget.startDate!;
+    final end = widget.endDate!;
+    
+    // Today
+    if (_isSameDay(start, today) && _isSameDay(end, today)) {
+      return 'Today';
+    }
+    
+    // Yesterday
+    final yesterday = today.subtract(const Duration(days: 1));
+    if (_isSameDay(start, yesterday) && _isSameDay(end, yesterday)) {
+      return 'Yesterday';
+    }
+    
+    // Last 7 days
+    final last7 = today.subtract(const Duration(days: 6));
+    if (_isSameDay(start, last7) && _isSameDay(end, today)) {
+      return 'Last 7 days';
+    }
+    
+    // Last 30 days
+    final last30 = today.subtract(const Duration(days: 29));
+    if (_isSameDay(start, last30) && _isSameDay(end, today)) {
+      return 'Last 30 days';
+    }
+    
+    // Last 90 days
+    final last90 = today.subtract(const Duration(days: 89));
+    if (_isSameDay(start, last90) && _isSameDay(end, today)) {
+      return 'Last 90 days';
+    }
+    
+    // This month
+    final thisMonthStart = DateTime(now.year, now.month, 1);
+    if (_isSameDay(start, thisMonthStart) && _isSameDay(end, today)) {
+      return 'This month';
+    }
+    
+    // Last month
+    final lastMonthStart = DateTime(now.year, now.month - 1, 1);
+    final lastMonthEnd = DateTime(now.year, now.month, 0);
+    if (_isSameDay(start, lastMonthStart) && _isSameDay(end, lastMonthEnd)) {
+      return 'Last month';
+    }
+    
+    // Custom range - show dates
+    return '${_formatDate(start)} - ${_formatDate(end)}';
   }
 
   @override
@@ -463,20 +569,46 @@ class _AdminDateRangePickerState extends State<AdminDateRangePicker> {
 
 class _QuickOptionButton extends StatelessWidget {
   final String label;
+  final bool isSelected;
   final VoidCallback onTap;
 
-  const _QuickOptionButton({required this.label, required this.onTap});
+  const _QuickOptionButton({
+    required this.label,
+    this.isSelected = false,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
       borderRadius: AdminRadius.smAll,
-      child: Padding(
+      child: Container(
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-        child: Text(
-          label,
-          style: AdminTextStyles.bodySmall,
+        decoration: BoxDecoration(
+          color: isSelected ? AdminColors.primary.withOpacity(0.15) : null,
+          borderRadius: AdminRadius.smAll,
+        ),
+        child: Row(
+          children: [
+            if (isSelected) ...[
+              Icon(
+                Icons.check,
+                size: 14,
+                color: AdminColors.primary,
+              ),
+              const SizedBox(width: 6),
+            ],
+            Expanded(
+              child: Text(
+                label,
+                style: AdminTextStyles.bodySmall.copyWith(
+                  color: isSelected ? AdminColors.primary : null,
+                  fontWeight: isSelected ? FontWeight.w600 : null,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
