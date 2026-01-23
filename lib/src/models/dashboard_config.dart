@@ -17,7 +17,6 @@ enum WidgetType {
   bar,
   line,
   table,
-  heatmap,
   coverageMap, // Map with clusters + heatmap toggle
 }
 
@@ -36,8 +35,6 @@ extension WidgetTypeExtension on WidgetType {
         return 'line';
       case WidgetType.table:
         return 'table';
-      case WidgetType.heatmap:
-        return 'heatmap';
       case WidgetType.coverageMap:
         return 'coverage_map';
     }
@@ -57,8 +54,6 @@ extension WidgetTypeExtension on WidgetType {
         return 'Line Chart';
       case WidgetType.table:
         return 'Data Table';
-      case WidgetType.heatmap:
-        return 'Heatmap';
       case WidgetType.coverageMap:
         return 'Coverage Map';
     }
@@ -78,8 +73,6 @@ extension WidgetTypeExtension on WidgetType {
         return 'show_chart';
       case WidgetType.table:
         return 'table_chart';
-      case WidgetType.heatmap:
-        return 'grid_on';
       case WidgetType.coverageMap:
         return 'map';
     }
@@ -99,8 +92,6 @@ extension WidgetTypeExtension on WidgetType {
         return 'Trend over time';
       case WidgetType.table:
         return 'Detailed data rows';
-      case WidgetType.heatmap:
-        return 'Density visualization';
       case WidgetType.coverageMap:
         return 'Geographic coverage with clusters & heatmap';
     }
@@ -843,7 +834,7 @@ class DisplayConfig {
 /// Complete configuration for a single dashboard widget
 class WidgetConfig {
   final String id;
-  final String type; // counter, pie, bar, line, table, heatmap
+  final String type; // counter, pie, bar, line, table, coverage_map
   final String title;
   final String? titleAr;
   final WidgetPosition position;
@@ -1006,21 +997,6 @@ class WidgetConfig {
           limit: 20,
         ),
         display: const DisplayConfig(),
-      );
-
-  /// Create a default heatmap widget
-  factory WidgetConfig.defaultHeatmap() => WidgetConfig(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        type: 'heatmap',
-        title: 'New Heatmap',
-        position: const WidgetPosition(x: 0, y: 0, w: 8, h: 4),
-        dataSource: const DataSourceConfig(
-          view: 'v_day_patterns',
-          valueField: 'availability_pct',
-        ),
-        display: const DisplayConfig(
-          colors: ['#FFCDD2', '#FFF9C4', '#C8E6C9'],
-        ),
       );
 
   /// Create a default coverage map widget
