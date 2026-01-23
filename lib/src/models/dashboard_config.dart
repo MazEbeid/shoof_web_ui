@@ -14,6 +14,7 @@ enum WidgetType {
   section, // Text divider: title, subtitle for visual organization
   missionOverview, // Special: shows visits, cities, channels + filters
   availabilityAnalysis, // SKU availability breakdown by brand, company, etc.
+  missedOpportunities, // OOS SKUs where competitors were available
   counter,
   pie,
   bar,
@@ -43,6 +44,8 @@ extension WidgetTypeExtension on WidgetType {
         return 'coverage_map';
       case WidgetType.availabilityAnalysis:
         return 'availability_analysis';
+      case WidgetType.missedOpportunities:
+        return 'missed_opportunities';
     }
   }
 
@@ -66,6 +69,8 @@ extension WidgetTypeExtension on WidgetType {
         return 'Coverage Map';
       case WidgetType.availabilityAnalysis:
         return 'Availability Analysis';
+      case WidgetType.missedOpportunities:
+        return 'Missed Opportunities';
     }
   }
 
@@ -89,6 +94,8 @@ extension WidgetTypeExtension on WidgetType {
         return 'map';
       case WidgetType.availabilityAnalysis:
         return 'inventory';
+      case WidgetType.missedOpportunities:
+        return 'trending_down';
     }
   }
 
@@ -112,6 +119,8 @@ extension WidgetTypeExtension on WidgetType {
         return 'Geographic coverage with clusters & heatmap';
       case WidgetType.availabilityAnalysis:
         return 'Product availability by brand, company & SKU';
+      case WidgetType.missedOpportunities:
+        return 'OOS SKUs where competitors were available';
     }
   }
 
@@ -1059,6 +1068,22 @@ class WidgetConfig {
         display: const DisplayConfig(
           subtitle: 'Product availability across visits',
           subtitleAr: 'توفر المنتجات عبر الزيارات',
+        ),
+      );
+
+  /// Create a default missed opportunities widget
+  factory WidgetConfig.defaultMissedOpportunities() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'missed_opportunities',
+        title: 'Missed Opportunities',
+        titleAr: 'الفرص الضائعة',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 3),
+        dataSource: const DataSourceConfig(
+          view: 'v_missed_opportunities',
+        ),
+        display: const DisplayConfig(
+          subtitle: 'OOS products where competitors were available',
+          subtitleAr: 'المنتجات غير المتوفرة حيث كان المنافسون متاحين',
         ),
       );
 }
