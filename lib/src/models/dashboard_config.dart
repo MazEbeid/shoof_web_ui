@@ -13,6 +13,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 enum WidgetType {
   section, // Text divider: title, subtitle for visual organization
   missionOverview, // Special: shows visits, cities, channels + filters
+  availabilityAnalysis, // SKU availability breakdown by brand, company, etc.
   counter,
   pie,
   bar,
@@ -40,6 +41,8 @@ extension WidgetTypeExtension on WidgetType {
         return 'table';
       case WidgetType.coverageMap:
         return 'coverage_map';
+      case WidgetType.availabilityAnalysis:
+        return 'availability_analysis';
     }
   }
 
@@ -61,6 +64,8 @@ extension WidgetTypeExtension on WidgetType {
         return 'Data Table';
       case WidgetType.coverageMap:
         return 'Coverage Map';
+      case WidgetType.availabilityAnalysis:
+        return 'Availability Analysis';
     }
   }
 
@@ -82,6 +87,8 @@ extension WidgetTypeExtension on WidgetType {
         return 'table_chart';
       case WidgetType.coverageMap:
         return 'map';
+      case WidgetType.availabilityAnalysis:
+        return 'inventory';
     }
   }
 
@@ -103,6 +110,8 @@ extension WidgetTypeExtension on WidgetType {
         return 'Detailed data rows';
       case WidgetType.coverageMap:
         return 'Geographic coverage with clusters & heatmap';
+      case WidgetType.availabilityAnalysis:
+        return 'Product availability by brand, company & SKU';
     }
   }
 
@@ -1034,6 +1043,22 @@ class WidgetConfig {
         ),
         display: const DisplayConfig(
           color: '#1976D2',
+        ),
+      );
+
+  /// Create a default availability analysis widget
+  factory WidgetConfig.defaultAvailabilityAnalysis() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'availability_analysis',
+        title: 'Availability Analysis',
+        titleAr: 'تحليل التوفر',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 3),
+        dataSource: const DataSourceConfig(
+          view: 'sku_availability',
+        ),
+        display: const DisplayConfig(
+          subtitle: 'Product availability across visits',
+          subtitleAr: 'توفر المنتجات عبر الزيارات',
         ),
       );
 }
