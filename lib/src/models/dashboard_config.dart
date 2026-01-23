@@ -11,6 +11,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 /// Supported widget types for dashboards
 enum WidgetType {
+  section, // Text divider: title, subtitle for visual organization
   missionOverview, // Special: shows visits, cities, channels + filters
   counter,
   pie,
@@ -23,6 +24,8 @@ enum WidgetType {
 extension WidgetTypeExtension on WidgetType {
   String get value {
     switch (this) {
+      case WidgetType.section:
+        return 'section';
       case WidgetType.missionOverview:
         return 'mission_overview';
       case WidgetType.counter:
@@ -42,6 +45,8 @@ extension WidgetTypeExtension on WidgetType {
 
   String get label {
     switch (this) {
+      case WidgetType.section:
+        return 'Section';
       case WidgetType.missionOverview:
         return 'Mission Overview';
       case WidgetType.counter:
@@ -61,6 +66,8 @@ extension WidgetTypeExtension on WidgetType {
 
   String get icon {
     switch (this) {
+      case WidgetType.section:
+        return 'title';
       case WidgetType.missionOverview:
         return 'dashboard';
       case WidgetType.counter:
@@ -80,6 +87,8 @@ extension WidgetTypeExtension on WidgetType {
 
   String get description {
     switch (this) {
+      case WidgetType.section:
+        return 'Title and subtitle for visual organization';
       case WidgetType.missionOverview:
         return 'Shows visits, cities, channels with date/city/channel filters';
       case WidgetType.counter:
@@ -648,7 +657,7 @@ class DataSourceConfig {
 
   const DataSourceConfig({
     this.type = 'supabase',
-    required this.view,
+    this.view = '', // Empty for widgets that don't need data (e.g., section)
     this.valueField,
     this.aggregation = 'count',
     this.groupBy,
@@ -890,6 +899,20 @@ class WidgetConfig {
         position: position ?? this.position,
         dataSource: dataSource ?? this.dataSource,
         display: display ?? this.display,
+      );
+
+  /// Create a default section widget (title/subtitle for visual organization)
+  factory WidgetConfig.defaultSection() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'section',
+        title: 'Section Title',
+        titleAr: 'عنوان القسم',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 1), // Full width, compact
+        dataSource: const DataSourceConfig(), // No data source needed
+        display: const DisplayConfig(
+          subtitle: 'Optional subtitle text',
+          subtitleAr: 'نص فرعي اختياري',
+        ),
       );
 
   /// Create a default mission overview widget (visits, cities, channels + filters)
