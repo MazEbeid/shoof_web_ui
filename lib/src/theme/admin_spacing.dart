@@ -55,5 +55,10 @@ class AdminSpacing {
   // Stat card dimensions
   static const double statCardMinWidth = 200.0;
   static const double statCardHeight = 120.0;
+
+  // Widget container heights (standardized for dashboard widgets)
+  static const double widgetSmall = 200.0;   // Counters, compact stats
+  static const double widgetMedium = 350.0;  // Charts, small tables
+  static const double widgetLarge = 500.0;   // Maps, large tables, detailed views
 }
 
