@@ -39,3 +39,6 @@ export 'src/widgets/insights_mission_card.dart';
 
 // Dashboard Models (shared between ShooAdmin and shoof_insights)
 export 'src/models/dashboard_config.dart';
+
+// Chart Components (reusable analytics charts)
+export 'src/widgets/charts/charts.dart';

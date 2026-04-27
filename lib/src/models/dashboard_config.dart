@@ -14,7 +14,11 @@ enum WidgetType {
   section, // Text divider: title, subtitle for visual organization
   missionOverview, // Special: shows visits, cities, channels + filters
   availabilityAnalysis, // SKU availability breakdown by brand, company, etc.
+  availabilityGrid, // Grid of mini donut charts per SKU
   missedOpportunities, // OOS SKUs where competitors were available
+  crossSell, // Warm store opportunities - easy wins
+  newBusiness, // Cold store opportunities - new market expansion
+  priceMonitor, // Composite: all pricing analysis graphs in one widget
   counter,
   pie,
   bar,
@@ -44,8 +48,16 @@ extension WidgetTypeExtension on WidgetType {
         return 'coverage_map';
       case WidgetType.availabilityAnalysis:
         return 'availability_analysis';
+      case WidgetType.availabilityGrid:
+        return 'availability_grid';
       case WidgetType.missedOpportunities:
         return 'missed_opportunities';
+      case WidgetType.crossSell:
+        return 'cross_sell';
+      case WidgetType.newBusiness:
+        return 'new_business';
+      case WidgetType.priceMonitor:
+        return 'price_monitor';
     }
   }
 
@@ -69,8 +81,16 @@ extension WidgetTypeExtension on WidgetType {
         return 'Coverage Map';
       case WidgetType.availabilityAnalysis:
         return 'Availability Analysis';
+      case WidgetType.availabilityGrid:
+        return 'Availability Grid';
       case WidgetType.missedOpportunities:
         return 'Missed Opportunities';
+      case WidgetType.crossSell:
+        return 'Cross-Sell Opportunities';
+      case WidgetType.newBusiness:
+        return 'New Business';
+      case WidgetType.priceMonitor:
+        return 'Price Monitor';
     }
   }
 
@@ -94,8 +114,16 @@ extension WidgetTypeExtension on WidgetType {
         return 'map';
       case WidgetType.availabilityAnalysis:
         return 'inventory';
+      case WidgetType.availabilityGrid:
+        return 'grid_view';
       case WidgetType.missedOpportunities:
         return 'trending_down';
+      case WidgetType.crossSell:
+        return 'trending_up';
+      case WidgetType.newBusiness:
+        return 'store';
+      case WidgetType.priceMonitor:
+        return 'price_change';
     }
   }
 
@@ -119,8 +147,16 @@ extension WidgetTypeExtension on WidgetType {
         return 'Geographic coverage with clusters & heatmap';
       case WidgetType.availabilityAnalysis:
         return 'Product availability by brand, company & SKU';
+      case WidgetType.availabilityGrid:
+        return 'Grid of mini donuts showing each SKU availability';
       case WidgetType.missedOpportunities:
         return 'OOS SKUs where competitors were available';
+      case WidgetType.crossSell:
+        return 'Warm stores where you already sell - easy wins';
+      case WidgetType.newBusiness:
+        return 'Cold stores - new market expansion opportunities';
+      case WidgetType.priceMonitor:
+        return 'Complete pricing analysis: trends, compliance, distribution & alerts';
     }
   }
 
@@ -1084,6 +1120,71 @@ class WidgetConfig {
         display: const DisplayConfig(
           subtitle: 'OOS products where competitors were available',
           subtitleAr: 'المنتجات غير المتوفرة حيث كان المنافسون متاحين',
+        ),
+      );
+
+  /// Create a default cross-sell opportunities widget
+  factory WidgetConfig.defaultCrossSell() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'cross_sell',
+        title: 'Cross-Sell Opportunities',
+        titleAr: 'فرص البيع المتقاطع',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 3),
+        dataSource: const DataSourceConfig(
+          view: 'v_missed_opps_by_sku',
+        ),
+        display: const DisplayConfig(
+          subtitle: 'Warm stores where you already sell - easy wins!',
+          subtitleAr: 'المتاجر التي تبيع فيها بالفعل - فرص سهلة',
+        ),
+      );
+
+  /// Create a default new business opportunities widget (cold stores)
+  factory WidgetConfig.defaultNewBusiness() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'new_business',
+        title: 'New Business Opportunities',
+        titleAr: 'فرص الأعمال الجديدة',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 3),
+        dataSource: const DataSourceConfig(
+          view: 'v_missed_opps_by_sku',
+        ),
+        display: const DisplayConfig(
+          subtitle: 'Cold stores - new market expansion opportunities',
+          subtitleAr: 'المتاجر الجديدة - فرص التوسع في السوق',
+        ),
+      );
+
+  /// Create a default availability grid widget
+  factory WidgetConfig.defaultAvailabilityGrid() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'availability_grid',
+        title: 'SKU Availability Overview',
+        titleAr: 'نظرة عامة على توفر المنتجات',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 4),
+        dataSource: const DataSourceConfig(
+          view: 'sku_availability',
+        ),
+        display: const DisplayConfig(
+          subtitle: 'Grid of mini charts showing each SKU availability',
+          subtitleAr: 'شبكة من الرسوم البيانية تظهر توفر كل منتج',
+        ),
+      );
+
+  /// Create a default price monitor widget (composite with all pricing analytics)
+  factory WidgetConfig.defaultPriceMonitor() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'price_monitor',
+        title: 'Price Monitor',
+        titleAr: 'مراقب الأسعار',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 6),
+        dataSource: const DataSourceConfig(
+          view: 'v_weekly_prices',
+        ),
+        display: const DisplayConfig(
+          color: '#9C27B0',
+          subtitle: 'Complete pricing analysis: trends, compliance & distribution',
+          subtitleAr: 'تحليل شامل للأسعار: الاتجاهات والامتثال والتوزيع',
         ),
       );
 }
