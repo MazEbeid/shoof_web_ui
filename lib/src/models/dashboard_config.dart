@@ -18,7 +18,9 @@ enum WidgetType {
   missedOpportunities, // OOS SKUs where competitors were available
   crossSell, // Warm store opportunities - easy wins
   newBusiness, // Cold store opportunities - new market expansion
-  priceMonitor, // Composite: all pricing analysis graphs in one widget
+  priceTrend, // Price trend line chart: Today / WoW / MoM
+  priceVsAnchor, // Observed price vs anchor deviation table
+  priceToday, // Today's price observations snapshot
   counter,
   pie,
   bar,
@@ -56,8 +58,12 @@ extension WidgetTypeExtension on WidgetType {
         return 'cross_sell';
       case WidgetType.newBusiness:
         return 'new_business';
-      case WidgetType.priceMonitor:
-        return 'price_monitor';
+      case WidgetType.priceTrend:
+        return 'price_trend';
+      case WidgetType.priceVsAnchor:
+        return 'price_vs_anchor';
+      case WidgetType.priceToday:
+        return 'price_today';
     }
   }
 
@@ -89,8 +95,12 @@ extension WidgetTypeExtension on WidgetType {
         return 'Cross-Sell Opportunities';
       case WidgetType.newBusiness:
         return 'New Business';
-      case WidgetType.priceMonitor:
-        return 'Price Monitor';
+      case WidgetType.priceTrend:
+        return 'Price Trend';
+      case WidgetType.priceVsAnchor:
+        return 'Price vs Anchor';
+      case WidgetType.priceToday:
+        return 'Field Detail (legacy)';
     }
   }
 
@@ -122,8 +132,12 @@ extension WidgetTypeExtension on WidgetType {
         return 'trending_up';
       case WidgetType.newBusiness:
         return 'store';
-      case WidgetType.priceMonitor:
-        return 'price_change';
+      case WidgetType.priceTrend:
+        return 'show_chart';
+      case WidgetType.priceVsAnchor:
+        return 'compare_arrows';
+      case WidgetType.priceToday:
+        return 'today';
     }
   }
 
@@ -155,8 +169,12 @@ extension WidgetTypeExtension on WidgetType {
         return 'Warm stores where you already sell - easy wins';
       case WidgetType.newBusiness:
         return 'Cold stores - new market expansion opportunities';
-      case WidgetType.priceMonitor:
-        return 'Complete pricing analysis: trends, compliance, distribution & alerts';
+      case WidgetType.priceTrend:
+        return 'Compare SKU price trends over time (multi-SKU)';
+      case WidgetType.priceVsAnchor:
+        return 'Observed prices vs anchor price with deviation % by channel/city';
+      case WidgetType.priceToday:
+        return 'Row-level observations — prefer Price Trend → View observations';
     }
   }
 
@@ -1171,20 +1189,43 @@ class WidgetConfig {
         ),
       );
 
-  /// Create a default price monitor widget (composite with all pricing analytics)
-  factory WidgetConfig.defaultPriceMonitor() => WidgetConfig(
+  /// Create a default price trend widget
+  factory WidgetConfig.defaultPriceTrend() => WidgetConfig(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        type: 'price_monitor',
-        title: 'Price Monitor',
-        titleAr: 'مراقب الأسعار',
-        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 6),
-        dataSource: const DataSourceConfig(
-          view: 'v_weekly_prices',
-        ),
+        type: 'price_trend',
+        title: 'Price Trend',
+        titleAr: 'اتجاه الأسعار',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 3),
+        dataSource: const DataSourceConfig(view: 'v_price_observations'),
         display: const DisplayConfig(
           color: '#9C27B0',
-          subtitle: 'Complete pricing analysis: trends, compliance & distribution',
-          subtitleAr: 'تحليل شامل للأسعار: الاتجاهات والامتثال والتوزيع',
+          subtitle: 'Week-over-week price changes',
+        ),
+      );
+
+  factory WidgetConfig.defaultPriceVsAnchor() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'price_vs_anchor',
+        title: 'Price vs Anchor',
+        titleAr: 'السعر مقابل السعر المرجعي',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 4),
+        dataSource: const DataSourceConfig(view: 'v_price_observations'),
+        display: const DisplayConfig(
+          color: '#9C27B0',
+          subtitle: 'Deviation from anchor price by channel and city',
+        ),
+      );
+
+  factory WidgetConfig.defaultPriceToday() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'price_today',
+        title: 'Field Detail',
+        titleAr: 'تفاصيل الميدان',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 3),
+        dataSource: const DataSourceConfig(view: 'v_price_observations'),
+        display: const DisplayConfig(
+          color: '#9C27B0',
+          subtitle: 'Legacy — use Price Trend (Today) → View observations',
         ),
       );
 }
