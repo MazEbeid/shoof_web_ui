@@ -42,3 +42,26 @@ export 'src/models/dashboard_config.dart';
 
 // Chart Components (reusable analytics charts)
 export 'src/widgets/charts/charts.dart';
+
+// Shared dashboard data layer (Supabase/Firestore providers + models)
+export 'src/data/supabase_client_provider.dart';
+export 'src/data/cities_constants.dart';
+export 'src/data/widget_data_providers.dart';
+export 'src/data/anchor_prices_provider.dart';
+export 'src/data/price_monitor_provider.dart';
+
+// Dashboard widgets (rendered by both ShooofAdmin and shoof_insights)
+export 'src/widgets/dashboard/price_widget_shell.dart';
+export 'src/widgets/dashboard/price_filter_controls.dart';
+export 'src/widgets/dashboard/price_sku_picker.dart';
+export 'src/widgets/dashboard/price_sku_summary_cards.dart';
+export 'src/widgets/dashboard/price_observations_dialog.dart';
+export 'src/widgets/dashboard/price_trend_widget.dart';
+export 'src/widgets/dashboard/price_vs_anchor_widget.dart';
+export 'src/widgets/dashboard/price_today_widget.dart';
+export 'src/widgets/dashboard/price_comparison_widget.dart';
+export 'src/widgets/dashboard/price_range_widget.dart';
+export 'src/widgets/dashboard/price_movers_widget.dart';
+export 'src/widgets/dashboard/availability_vs_price_widget.dart';
+export 'src/widgets/dashboard/coverage_map_widget.dart';
+export 'src/widgets/dashboard/widget_filters_row.dart';

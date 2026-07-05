@@ -21,6 +21,10 @@ enum WidgetType {
   priceTrend, // Price trend line chart: Today / WoW / MoM
   priceVsAnchor, // Observed price vs anchor deviation table
   priceToday, // Today's price observations snapshot
+  priceComparison, // Avg price per city or channel bar chart
+  priceRange, // Min–avg–max spread per SKU with anchor overlay
+  priceMovers, // Biggest WoW/MoM price changes per SKU
+  availabilityVsPrice, // Availability % vs avg price per SKU
   counter,
   pie,
   bar,
@@ -64,6 +68,14 @@ extension WidgetTypeExtension on WidgetType {
         return 'price_vs_anchor';
       case WidgetType.priceToday:
         return 'price_today';
+      case WidgetType.priceComparison:
+        return 'price_comparison';
+      case WidgetType.priceRange:
+        return 'price_range';
+      case WidgetType.priceMovers:
+        return 'price_movers';
+      case WidgetType.availabilityVsPrice:
+        return 'availability_vs_price';
     }
   }
 
@@ -101,6 +113,14 @@ extension WidgetTypeExtension on WidgetType {
         return 'Price vs Anchor';
       case WidgetType.priceToday:
         return 'Field Detail (legacy)';
+      case WidgetType.priceComparison:
+        return 'Price Comparison';
+      case WidgetType.priceRange:
+        return 'Price Range';
+      case WidgetType.priceMovers:
+        return 'Price Movers';
+      case WidgetType.availabilityVsPrice:
+        return 'Availability vs Price';
     }
   }
 
@@ -138,6 +158,14 @@ extension WidgetTypeExtension on WidgetType {
         return 'compare_arrows';
       case WidgetType.priceToday:
         return 'today';
+      case WidgetType.priceComparison:
+        return 'bar_chart';
+      case WidgetType.priceRange:
+        return 'linear_scale';
+      case WidgetType.priceMovers:
+        return 'swap_vert';
+      case WidgetType.availabilityVsPrice:
+        return 'price_check';
     }
   }
 
@@ -175,6 +203,14 @@ extension WidgetTypeExtension on WidgetType {
         return 'Observed prices vs anchor price with deviation % by channel/city';
       case WidgetType.priceToday:
         return 'Row-level observations — prefer Price Trend → View observations';
+      case WidgetType.priceComparison:
+        return 'Average SKU price compared across cities or channels';
+      case WidgetType.priceRange:
+        return 'Min–avg–max price spread per SKU with anchor price overlay';
+      case WidgetType.priceMovers:
+        return 'SKUs with the biggest week/month price changes';
+      case WidgetType.availabilityVsPrice:
+        return 'Flags SKUs that are both expensive and hard to find';
     }
   }
 
@@ -1226,6 +1262,58 @@ class WidgetConfig {
         display: const DisplayConfig(
           color: '#9C27B0',
           subtitle: 'Legacy — use Price Trend (Today) → View observations',
+        ),
+      );
+
+  factory WidgetConfig.defaultPriceComparison() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'price_comparison',
+        title: 'Price Comparison',
+        titleAr: 'مقارنة الأسعار',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 3),
+        dataSource: const DataSourceConfig(view: 'v_price_observations'),
+        display: const DisplayConfig(
+          color: '#8E24AA',
+          subtitle: 'Average price by city or channel',
+        ),
+      );
+
+  factory WidgetConfig.defaultPriceRange() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'price_range',
+        title: 'Price Range',
+        titleAr: 'نطاق الأسعار',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 3),
+        dataSource: const DataSourceConfig(view: 'v_price_observations'),
+        display: const DisplayConfig(
+          color: '#AB47BC',
+          subtitle: 'Min–avg–max price spread per SKU vs anchor',
+        ),
+      );
+
+  factory WidgetConfig.defaultPriceMovers() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'price_movers',
+        title: 'Price Movers',
+        titleAr: 'تغيرات الأسعار',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 3),
+        dataSource: const DataSourceConfig(view: 'v_price_observations'),
+        display: const DisplayConfig(
+          color: '#6A1B9A',
+          subtitle: 'Biggest price changes week over week',
+        ),
+      );
+
+  factory WidgetConfig.defaultAvailabilityVsPrice() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'availability_vs_price',
+        title: 'Availability vs Price',
+        titleAr: 'التوفر مقابل السعر',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 3),
+        dataSource: const DataSourceConfig(view: 'v_price_observations'),
+        display: const DisplayConfig(
+          color: '#4A148C',
+          subtitle: 'Products that are expensive and hard to find',
         ),
       );
 }
