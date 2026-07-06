@@ -62,7 +62,9 @@ class CoverageMapWidget extends HookConsumerWidget {
     final locationsAsync = ref.watch(mapLocationsForWidgetProvider(filterParams));
 
     return Container(
-      height: AdminSpacing.widgetMedium,
+      // The stylized Egypt map is portrait (400x445); widgetLarge gives it
+      // enough vertical room for city bubbles and labels to stay legible.
+      height: AdminSpacing.widgetLarge,
       padding: const EdgeInsets.all(AdminSpacing.lg),
       decoration: BoxDecoration(
         color: AdminColors.surface,
@@ -180,7 +182,7 @@ class _EgyptBubbleMap extends StatelessWidget {
       final group = groups[i];
       final position = _positionFor(group);
       final ratio = maxCount == 0 ? 0.0 : group.count / maxCount;
-      final radius = 7.0 + 15.0 * math.sqrt(ratio);
+      final radius = 8.0 + 16.0 * math.sqrt(ratio);
 
       // Smaller bubbles are drawn last (on top) so dense areas stay clickable;
       // labels only for the busiest cities to avoid clutter.
@@ -202,13 +204,27 @@ class _EgyptBubbleMap extends StatelessWidget {
                   shape: BoxShape.circle,
                   border: Border.all(color: Colors.white, width: 1.5),
                 ),
+                // Visit count inside bubbles large enough to hold it, so the
+                // map is verifiable against the side panel at a glance.
+                child: radius >= 12
+                    ? Center(
+                        child: Text(
+                          '${group.count}',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: radius >= 18 ? 11 : 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      )
+                    : null,
               ),
             ),
           ),
         ),
       ));
 
-      if (i < 5) {
+      if (i < 8) {
         children.add(Positioned(
           left: position.dx - 40,
           top: position.dy + radius + 2,
@@ -220,9 +236,9 @@ class _EgyptBubbleMap extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 9.5,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF64748B),
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF475569),
               ),
             ),
           ),
