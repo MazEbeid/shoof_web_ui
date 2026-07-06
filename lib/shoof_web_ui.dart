@@ -46,6 +46,7 @@ export 'src/widgets/charts/charts.dart';
 // Shared dashboard data layer (Supabase/Firestore providers + models)
 export 'src/data/supabase_client_provider.dart';
 export 'src/data/cities_constants.dart';
+export 'src/data/region_colors.dart';
 export 'src/data/widget_data_providers.dart';
 export 'src/data/anchor_prices_provider.dart';
 export 'src/data/price_monitor_provider.dart';
@@ -64,6 +65,7 @@ export 'src/widgets/dashboard/price_range_widget.dart';
 export 'src/widgets/dashboard/price_movers_widget.dart';
 export 'src/widgets/dashboard/availability_vs_price_widget.dart';
 export 'src/widgets/dashboard/availability_analysis_widget.dart';
+export 'src/widgets/dashboard/collapsible_widget_shell.dart';
 export 'src/widgets/dashboard/coverage_map_widget.dart';
 export 'src/widgets/dashboard/mission_overview_widget.dart';
 export 'src/widgets/dashboard/section_widget.dart';

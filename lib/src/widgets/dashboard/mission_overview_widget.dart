@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import 'coverage_map_widget.dart' show regionColorFor;
 import 'widget_filters_row.dart';
 import '../admin_stat_card.dart';
 import '../../data/cities_constants.dart';
+import '../../data/region_colors.dart';
 import '../../data/widget_data_providers.dart';
 import '../../theme/admin_colors.dart';
 import '../../theme/admin_spacing.dart';
@@ -131,6 +131,14 @@ class MissionOverviewWidget extends HookConsumerWidget {
                     title: 'By Region',
                     dataAsync: regionBreakdownAsync,
                     colorFor: _regionColor,
+                    onLabelTap: (label) {
+                      if (label != _unknownRegionLabel) return;
+                      _showUnknownRegionDialog(
+                        context,
+                        filterParams,
+                        overviewAsync.valueOrNull?.totalSubmissions,
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: AdminSpacing.lg),
@@ -203,6 +211,7 @@ class MissionOverviewWidget extends HookConsumerWidget {
     required String title,
     required AsyncValue<List<ChartDataPoint>> dataAsync,
     required Color Function(String label, int index) colorFor,
+    void Function(String label)? onLabelTap,
   }) {
     return Container(
       padding: const EdgeInsets.all(AdminSpacing.md),
@@ -254,34 +263,50 @@ class MissionOverviewWidget extends HookConsumerWidget {
                           children: data.asMap().entries.map((entry) {
                             final index = entry.key;
                             final point = entry.value;
+                            final isUnknown =
+                                point.label == _unknownRegionLabel;
+                            final row = Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: colorFor(point.label, index),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    point.label,
+                                    style: AdminTextStyles.labelSmall,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (isUnknown && onLabelTap != null) ...[
+                                  const Icon(
+                                    Icons.info_outline,
+                                    size: 12,
+                                    color: _unknownRegionColor,
+                                  ),
+                                  const SizedBox(width: 4),
+                                ],
+                                Text(
+                                  point.value.toInt().toString(),
+                                  style: AdminTextStyles.labelSmall.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            );
                             return Padding(
                               padding: const EdgeInsets.symmetric(vertical: 2),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      color: colorFor(point.label, index),
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      point.label,
-                                      style: AdminTextStyles.labelSmall,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  Text(
-                                    point.value.toInt().toString(),
-                                    style: AdminTextStyles.labelSmall.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              child: onLabelTap != null
+                                  ? InkWell(
+                                      onTap: () => onLabelTap(point.label),
+                                      child: row,
+                                    )
+                                  : row,
                             );
                           }).toList(),
                         ),
@@ -318,17 +343,24 @@ class MissionOverviewWidget extends HookConsumerWidget {
     }).toList();
   }
 
-  static const _unspecifiedLabel = 'Unspecified';
+  static const _unknownRegionLabel = 'Unknown region';
+  static const _unknownRegionColor = Color(0xFFFFB300);
 
-  /// Rolls per-city counts up into regions (via CITIES constants). Visits with
-  /// no recorded city still count toward the visits total, so the difference
-  /// is surfaced as an "Unspecified" slice instead of silently under-summing.
+  /// Rolls per-city counts up into regions (via CITIES constants). Visits
+  /// whose city fails the region lookup, plus visits with no city recorded at
+  /// all, are surfaced as an explicit "Unknown region" slice - deliberately
+  /// visible so mapping gaps get diagnosed and fixed, never hidden.
   static List<ChartDataPoint> _toRegionBreakdown(
       List<ChartDataPoint> cities, int? totalVisits) {
     final regionCounts = <String, double>{};
+    double unknown = 0;
     for (final city in cities) {
-      final region = (cityInfoFor(city.label)?['region'] as String?) ?? 'Other';
-      regionCounts[region] = (regionCounts[region] ?? 0) + city.value;
+      final region = cityInfoFor(city.label)?['region'] as String?;
+      if (region == null) {
+        unknown += city.value;
+      } else {
+        regionCounts[region] = (regionCounts[region] ?? 0) + city.value;
+      }
     }
 
     final points = regionCounts.entries
@@ -337,18 +369,139 @@ class MissionOverviewWidget extends HookConsumerWidget {
       ..sort((a, b) => b.value.compareTo(a.value));
 
     if (totalVisits != null) {
-      final counted = points.fold<double>(0, (sum, p) => sum + p.value);
-      final unspecified = totalVisits - counted;
-      if (unspecified > 0) {
-        points.add(ChartDataPoint(label: _unspecifiedLabel, value: unspecified));
-      }
+      final counted =
+          points.fold<double>(0, (sum, p) => sum + p.value) + unknown;
+      final noCity = totalVisits - counted;
+      if (noCity > 0) unknown += noCity;
+    }
+    if (unknown > 0) {
+      points.add(ChartDataPoint(label: _unknownRegionLabel, value: unknown));
     }
     return points;
   }
 
   static Color _regionColor(String label, int index) {
-    if (label == _unspecifiedLabel) return const Color(0xFFBDBDBD);
+    if (label == _unknownRegionLabel) return _unknownRegionColor;
     return regionColorFor(label);
+  }
+
+  /// Drill-in for the "Unknown region" slice: names the exact city values
+  /// that fail the region lookup (need aliases in cities_constants) and the
+  /// count of visits with no city recorded at all (ingest gap).
+  void _showUnknownRegionDialog(
+    BuildContext context,
+    WidgetFilterParams params,
+    int? totalVisits,
+  ) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AdminColors.surface,
+        title: Row(
+          children: [
+            const Icon(Icons.help_outline, color: _unknownRegionColor),
+            const SizedBox(width: 8),
+            Text(_unknownRegionLabel, style: AdminTextStyles.sectionTitle),
+          ],
+        ),
+        content: SizedBox(
+          width: 400,
+          child: Consumer(
+            builder: (context, ref, _) {
+              final unmappedAsync = ref.watch(unmappedCitiesProvider(params));
+              final citiesAsync =
+                  ref.watch(cityBreakdownForWidgetProvider(params));
+              return unmappedAsync.when(
+                loading: () => const SizedBox(
+                  height: 80,
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                ),
+                error: (e, _) => Text(
+                  'Error loading detail: $e',
+                  style: AdminTextStyles.bodySmall
+                      .copyWith(color: AdminColors.error),
+                ),
+                data: (unmapped) {
+                  final knownSum = citiesAsync.valueOrNull
+                      ?.fold<double>(0, (sum, c) => sum + c.value);
+                  final noCity = (totalVisits != null && knownSum != null)
+                      ? totalVisits - knownSum
+                      : null;
+                  final hasNoCity = noCity != null && noCity > 0;
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Visits that could not be mapped to a region:',
+                        style: AdminTextStyles.bodySmall
+                            .copyWith(color: AdminColors.textSecondary),
+                      ),
+                      const SizedBox(height: AdminSpacing.sm),
+                      if (unmapped.isEmpty && !hasNoCity)
+                        Text('None - all visits are mapped.',
+                            style: AdminTextStyles.bodySmall),
+                      for (final city in unmapped)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'City value "${city.label}"',
+                                  style: AdminTextStyles.bodySmall,
+                                ),
+                              ),
+                              Text(
+                                '${city.value.toInt()} visits',
+                                style: AdminTextStyles.bodySmall
+                                    .copyWith(fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (hasNoCity)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'No city recorded on the visit',
+                                  style: AdminTextStyles.bodySmall,
+                                ),
+                              ),
+                              Text(
+                                '${noCity.toInt()} visits',
+                                style: AdminTextStyles.bodySmall
+                                    .copyWith(fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: AdminSpacing.md),
+                      Text(
+                        'Named values need an alias in the cities mapping; '
+                        '"no city" means the visit was ingested without a '
+                        'city field.',
+                        style: AdminTextStyles.labelSmall
+                            .copyWith(color: AdminColors.textMuted),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
   }
 
   static const _channelColors = [

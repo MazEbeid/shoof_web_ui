@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'price_widget_shell.dart';
+import 'widget_filters_row.dart';
 import '../../data/price_monitor_provider.dart';
 import '../../theme/admin_colors.dart';
 import '../../theme/admin_radius.dart';
+import '../../theme/admin_spacing.dart';
 import '../../theme/admin_typography.dart';
 
-/// Availability % joined with average price per SKU — flags products that
-/// are both scarce and priced above the median.
-class AvailabilityVsPriceWidget extends ConsumerWidget {
+/// Availability % (store-level, latest visit per store) joined with average
+/// observed price per SKU — flags products that are both scarce and priced
+/// above the median. Filters apply to BOTH sides of the join.
+class AvailabilityVsPriceWidget extends HookConsumerWidget {
   final String missionId;
   final String title;
   final String? subtitle;
@@ -22,33 +26,76 @@ class AvailabilityVsPriceWidget extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final selectedCity = useState<String?>(null);
+    final selectedChannel = useState<String?>(null);
+    final startDate = useState<DateTime?>(null);
+    final endDate = useState<DateTime?>(null);
+
+    final hasFilters = selectedCity.value != null ||
+        selectedChannel.value != null ||
+        startDate.value != null ||
+        endDate.value != null;
+
     final rowsAsync = ref.watch(
-      availabilityVsPriceProvider(PriceFilterParams(missionId: missionId)),
+      availabilityVsPriceProvider(PriceFilterParams(
+        missionId: missionId,
+        city: selectedCity.value,
+        channel: selectedChannel.value,
+        startDate: startDate.value,
+        endDate: endDate.value,
+      )),
     );
 
     return PriceWidgetShell(
       title: title,
       subtitle: subtitle,
-      child: PriceAsyncContent(
-        value: rowsAsync,
-        builder: (rows) {
-          if (rows.isEmpty) {
-            return const PriceWidgetMessage(
-              message: 'No availability data for this mission',
-            );
-          }
-          return Column(
-            children: [
-              _Header(),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: rows.length,
-                  itemBuilder: (context, i) => _Row(row: rows[i]),
-                ),
-              ),
-            ],
-          );
-        },
+      child: Column(
+        children: [
+          WidgetFiltersRow(
+            missionId: missionId,
+            selectedCity: selectedCity.value,
+            selectedChannel: selectedChannel.value,
+            startDate: startDate.value,
+            endDate: endDate.value,
+            hasFilters: hasFilters,
+            onCityChanged: (v) => selectedCity.value = v,
+            onChannelChanged: (v) => selectedChannel.value = v,
+            onDateRangeChanged: (range) {
+              startDate.value = range?.start;
+              endDate.value = range?.end;
+            },
+            onClearAll: () {
+              selectedCity.value = null;
+              selectedChannel.value = null;
+              startDate.value = null;
+              endDate.value = null;
+            },
+          ),
+          const SizedBox(height: AdminSpacing.md),
+          Expanded(
+            child: PriceAsyncContent(
+              value: rowsAsync,
+              builder: (rows) {
+                if (rows.isEmpty) {
+                  return const PriceWidgetMessage(
+                    message: 'No availability data for this mission',
+                  );
+                }
+                return Column(
+                  children: [
+                    _Header(),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: rows.length,
+                        itemBuilder: (context, i) => _Row(row: rows[i]),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -68,7 +115,7 @@ class _Header extends StatelessWidget {
           Expanded(flex: 3, child: Text('SKU', style: style)),
           SizedBox(width: 110, child: Text('Availability', style: style)),
           SizedBox(width: 90, child: Text('Avg price', style: style)),
-          SizedBox(width: 70, child: Text('Checks', style: style)),
+          SizedBox(width: 70, child: Text('Stores', style: style)),
         ],
       ),
     );

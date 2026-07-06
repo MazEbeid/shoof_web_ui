@@ -1,5 +1,6 @@
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
+import 'cities_constants.dart';
 import 'supabase_client_provider.dart';
 
 /// Filter params for widget-specific queries.
@@ -7,6 +8,9 @@ import 'supabase_client_provider.dart';
 class WidgetFilterParams {
   final String missionId;
   final String? company;
+  final String? brand;
+  final String? package;
+  final String? size;
   final String? city;
   final String? channel;
   final DateTime? startDate;
@@ -15,6 +19,9 @@ class WidgetFilterParams {
   const WidgetFilterParams({
     required this.missionId,
     this.company,
+    this.brand,
+    this.package,
+    this.size,
     this.city,
     this.channel,
     this.startDate,
@@ -24,6 +31,9 @@ class WidgetFilterParams {
   /// Check if any filters are active (besides missionId)
   bool get hasFilters =>
       company != null ||
+      brand != null ||
+      package != null ||
+      size != null ||
       city != null ||
       channel != null ||
       startDate != null ||
@@ -35,14 +45,17 @@ class WidgetFilterParams {
       other is WidgetFilterParams &&
           missionId == other.missionId &&
           company == other.company &&
+          brand == other.brand &&
+          package == other.package &&
+          size == other.size &&
           city == other.city &&
           channel == other.channel &&
           startDate == other.startDate &&
           endDate == other.endDate;
 
   @override
-  int get hashCode =>
-      Object.hash(missionId, company, city, channel, startDate, endDate);
+  int get hashCode => Object.hash(missionId, company, brand, package, size,
+      city, channel, startDate, endDate);
 }
 
 /// Location data point for the coverage map (one per accepted visit).
@@ -202,51 +215,33 @@ class SkuAvailability {
   }
 }
 
-/// SKU availability provider with widget-local filters
+/// SKU availability with widget-local filters.
 ///
-/// Strategy:
-/// 1. If filters applied, try Postgres function fn_sku_availability_filtered (if deployed)
-/// 2. Fall back to aggregate view v_availability_by_sku (no filter support)
+/// Always served by RPC fn_sku_availability_filtered (nulls = unfiltered):
+/// one code path, all filters applied server-side, STORE-level semantics
+/// (each store counted once, its latest visit decides). Errors are rethrown
+/// so widgets show an error state instead of quietly-wrong numbers.
 final skuAvailabilityForWidgetProvider =
     FutureProvider.family<List<SkuAvailability>, WidgetFilterParams>(
         (ref, params) async {
   final supabase = ref.watch(sharedSupabaseProvider);
 
-  final hasCityChannelDateFilters = params.city != null ||
-      params.channel != null ||
-      params.startDate != null ||
-      params.endDate != null;
+  final rpcResponse =
+      await supabase.rpc('fn_sku_availability_filtered', params: {
+    'p_mission_id': params.missionId,
+    'p_city': params.city,
+    'p_channel': params.channel,
+    'p_start_date': params.startDate?.toIso8601String().split('T')[0],
+    'p_end_date': params.endDate?.toIso8601String().split('T')[0],
+    'p_company': params.company,
+    'p_brand': params.brand,
+    'p_package': params.package,
+    'p_size': params.size,
+  });
 
-  try {
-    if (hasCityChannelDateFilters) {
-      try {
-        final rpcResponse =
-            await supabase.rpc('fn_sku_availability_filtered', params: {
-          'p_mission_id': params.missionId,
-          'p_city': params.city,
-          'p_channel': params.channel,
-          'p_start_date': params.startDate?.toIso8601String().split('T')[0],
-          'p_end_date': params.endDate?.toIso8601String().split('T')[0],
-        });
-
-        final data = rpcResponse as List;
-        return data.map((e) => SkuAvailability.fromMap(e)).toList();
-      } catch (rpcError) {
-        // Function doesn't exist yet - fall back to aggregate view
-      }
-    }
-
-    final query = supabase
-        .from('v_availability_by_sku')
-        .select()
-        .eq('mission_id', params.missionId);
-
-    final response = await query.order('availability_rate', ascending: false);
-
-    return response.map((e) => SkuAvailability.fromMap(e)).toList();
-  } catch (e) {
-    return [];
-  }
+  return (rpcResponse as List)
+      .map((e) => SkuAvailability.fromMap(e))
+      .toList();
 });
 
 /// One cell of the SKU x Channel availability matrix.
@@ -269,94 +264,88 @@ class SkuChannelAvailability {
 
 /// Availability broken out by SKU AND channel (both dimensions).
 ///
-/// Strategy:
-/// 1. Try RPC fn_sku_channel_availability (see supabase_dashboard_views.sql)
-/// 2. Fall back to client-side aggregation over the sku_availability table -
-///    the same source v_availability_by_sku (the "By SKU" list) is built from.
-///    SKU names are upper/trimmed to match that matview's normalization.
+/// Always served by RPC fn_sku_channel_availability (nulls = unfiltered) with
+/// STORE-level semantics (each store counted once, latest visit decides).
+/// Errors are rethrown so widgets show an error state instead of
+/// quietly-wrong numbers.
 final skuChannelAvailabilityForWidgetProvider =
     FutureProvider.family<List<SkuChannelAvailability>, WidgetFilterParams>(
         (ref, params) async {
   final supabase = ref.watch(sharedSupabaseProvider);
 
+  final rpcResponse =
+      await supabase.rpc('fn_sku_channel_availability', params: {
+    'p_mission_id': params.missionId,
+    'p_city': params.city,
+    'p_channel': params.channel,
+    'p_start_date': params.startDate?.toIso8601String().split('T')[0],
+    'p_end_date': params.endDate?.toIso8601String().split('T')[0],
+    'p_company': params.company,
+    'p_brand': params.brand,
+    'p_package': params.package,
+    'p_size': params.size,
+  });
+
+  return (rpcResponse as List)
+      .map((e) => SkuChannelAvailability(
+            skuEnglish: e['sku_english'] ?? 'Unknown',
+            channel: e['channel'] ?? 'Unknown',
+            totalChecks: (e['total_checks'] as num?)?.toInt() ?? 0,
+            availableCount: (e['available_count'] as num?)?.toInt() ?? 0,
+          ))
+      .toList();
+});
+
+/// Distinct SKU dimensions (company/brand/package/size) for filter dropdowns.
+class SkuDimensions {
+  final List<String> companies;
+  final List<String> brands;
+  final List<String> packages;
+  final List<String> sizes;
+
+  const SkuDimensions({
+    this.companies = const [],
+    this.brands = const [],
+    this.packages = const [],
+    this.sizes = const [],
+  });
+}
+
+final skuDimensionsProvider =
+    FutureProvider.family<SkuDimensions, String>((ref, missionId) async {
+  final supabase = ref.watch(sharedSupabaseProvider);
+
   try {
-    try {
-      final rpcResponse =
-          await supabase.rpc('fn_sku_channel_availability', params: {
-        'p_mission_id': params.missionId,
-        'p_city': params.city,
-        'p_channel': params.channel,
-        'p_start_date': params.startDate?.toIso8601String().split('T')[0],
-        'p_end_date': params.endDate?.toIso8601String().split('T')[0],
-      });
+    final response = await supabase
+        .rpc('fn_availability_dimensions', params: {'p_mission_id': missionId});
 
-      final rows = (rpcResponse as List)
-          .map((e) => SkuChannelAvailability(
-                skuEnglish: e['sku_english'] ?? 'Unknown',
-                channel: e['channel'] ?? 'Unknown',
-                totalChecks: (e['total_checks'] as num?)?.toInt() ?? 0,
-                availableCount: (e['available_count'] as num?)?.toInt() ?? 0,
-              ))
-          .toList();
-      if (rows.isNotEmpty) return rows;
-      // Empty could mean the deployed function predates the sku_availability
-      // rewrite - let the fallback decide.
-    } catch (rpcError) {
-      // Function not deployed yet - fall back to client-side aggregation
-    }
-
-    var query = supabase
-        .from('sku_availability')
-        .select('sku_english, channel, available')
-        .eq('mission_id', params.missionId)
-        .not('sku_english', 'is', null)
-        .not('channel', 'is', null);
-
-    if (params.city != null) {
-      query = query.eq('city', params.city!);
-    }
-    if (params.channel != null) {
-      query = query.eq('channel', params.channel!);
-    }
-    if (params.startDate != null) {
-      query = query.gte(
-          'observed_date', params.startDate!.toIso8601String().split('T')[0]);
-    }
-    if (params.endDate != null) {
-      query = query.lte(
-          'observed_date', params.endDate!.toIso8601String().split('T')[0]);
-    }
-
-    final response = await query.limit(100000);
-    final data = response as List;
-
-    // sku -> channel -> [totalChecks, availableCount]
-    final matrix = <String, Map<String, List<int>>>{};
-    for (final row in data) {
-      final sku = (row['sku_english'] as String?)?.trim().toUpperCase();
-      final channel = (row['channel'] as String?)?.trim();
-      if (sku == null || sku.isEmpty || channel == null || channel.isEmpty) {
-        continue;
+    final companies = <String>[];
+    final brands = <String>[];
+    final packages = <String>[];
+    final sizes = <String>[];
+    for (final row in (response as List)) {
+      final value = row['value'] as String?;
+      if (value == null || value.isEmpty) continue;
+      switch (row['dimension'] as String?) {
+        case 'company':
+          companies.add(value);
+        case 'brand':
+          brands.add(value);
+        case 'package':
+          packages.add(value);
+        case 'size':
+          sizes.add(value);
       }
-      final cell = matrix
-          .putIfAbsent(sku, () => {})
-          .putIfAbsent(channel, () => [0, 0]);
-      cell[0]++;
-      if (row['available'] == true) cell[1]++;
     }
-
-    return [
-      for (final skuEntry in matrix.entries)
-        for (final channelEntry in skuEntry.value.entries)
-          SkuChannelAvailability(
-            skuEnglish: skuEntry.key,
-            channel: channelEntry.key,
-            totalChecks: channelEntry.value[0],
-            availableCount: channelEntry.value[1],
-          ),
-    ];
+    return SkuDimensions(
+      companies: companies,
+      brands: brands,
+      packages: packages,
+      sizes: sizes,
+    );
   } catch (e) {
-    return [];
+    // Dropdowns simply stay hidden when the RPC isn't deployed.
+    return const SkuDimensions();
   }
 });
 
@@ -602,6 +591,9 @@ final channelBreakdownForWidgetProvider =
     if (params.city != null) {
       query = query.eq('city', params.city!);
     }
+    if (params.channel != null) {
+      query = query.eq('channel', params.channel!);
+    }
     if (params.startDate != null) {
       query = query.gte(
           'observed_date', params.startDate!.toIso8601String().split('T')[0]);
@@ -632,4 +624,15 @@ final channelBreakdownForWidgetProvider =
   } catch (e) {
     return [];
   }
+});
+
+/// City values that fail the CITIES region lookup, with their visit counts.
+/// Feeds the "Unknown region" drill-in so unmapped data is diagnosed (which
+/// spellings/districts need aliases in cities_constants) instead of hidden.
+final unmappedCitiesProvider =
+    FutureProvider.family<List<ChartDataPoint>, WidgetFilterParams>(
+        (ref, params) async {
+  final cities =
+      await ref.watch(cityBreakdownForWidgetProvider(params).future);
+  return cities.where((c) => cityInfoFor(c.label) == null).toList();
 });

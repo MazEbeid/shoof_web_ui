@@ -8,15 +8,27 @@ import '../../theme/admin_typography.dart';
 import '../admin_date_range_picker.dart';
 
 /// Reusable filter row for dashboard widgets
-/// Includes: City dropdown, Channel dropdown, Date range picker
+/// Includes: City dropdown, Channel dropdown, Date range picker.
+///
+/// Widgets showing SKU data can opt into company/brand/package/size dropdowns
+/// by passing the corresponding onChanged callbacks; option lists come from
+/// fn_availability_dimensions via [skuDimensionsProvider].
 class WidgetFiltersRow extends ConsumerWidget {
   final String missionId;
   final String? selectedCity;
   final String? selectedChannel;
+  final String? selectedCompany;
+  final String? selectedBrand;
+  final String? selectedPackage;
+  final String? selectedSize;
   final DateTime? startDate;
   final DateTime? endDate;
   final ValueChanged<String?> onCityChanged;
   final ValueChanged<String?> onChannelChanged;
+  final ValueChanged<String?>? onCompanyChanged;
+  final ValueChanged<String?>? onBrandChanged;
+  final ValueChanged<String?>? onPackageChanged;
+  final ValueChanged<String?>? onSizeChanged;
   final ValueChanged<DateTimeRange?> onDateRangeChanged;
   final VoidCallback? onClearAll;
   final bool hasFilters;
@@ -26,19 +38,36 @@ class WidgetFiltersRow extends ConsumerWidget {
     required this.missionId,
     this.selectedCity,
     this.selectedChannel,
+    this.selectedCompany,
+    this.selectedBrand,
+    this.selectedPackage,
+    this.selectedSize,
     this.startDate,
     this.endDate,
     required this.onCityChanged,
     required this.onChannelChanged,
+    this.onCompanyChanged,
+    this.onBrandChanged,
+    this.onPackageChanged,
+    this.onSizeChanged,
     required this.onDateRangeChanged,
     this.onClearAll,
     this.hasFilters = false,
   });
 
+  bool get _wantsSkuDims =>
+      onCompanyChanged != null ||
+      onBrandChanged != null ||
+      onPackageChanged != null ||
+      onSizeChanged != null;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final citiesAsync = ref.watch(missionCitiesProvider(missionId));
     final channelsAsync = ref.watch(missionChannelsProvider(missionId));
+    final dims = _wantsSkuDims
+        ? ref.watch(skuDimensionsProvider(missionId)).valueOrNull
+        : null;
 
     return Container(
       padding: const EdgeInsets.all(AdminSpacing.sm),
@@ -46,8 +75,12 @@ class WidgetFiltersRow extends ConsumerWidget {
         color: AdminColors.backgroundHover,
         borderRadius: AdminRadius.smAll,
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
           // City dropdown
           Expanded(
             child: citiesAsync.when(
@@ -111,16 +144,77 @@ class WidgetFiltersRow extends ConsumerWidget {
             ),
           ),
 
-          // Clear all button
-          if (hasFilters) ...[
-            const SizedBox(width: AdminSpacing.sm),
-            IconButton(
-              onPressed: onClearAll,
-              icon: const Icon(Icons.clear_all, size: 20),
-              tooltip: 'Clear all filters',
-              style: IconButton.styleFrom(
-                foregroundColor: AdminColors.textMuted,
-              ),
+              // Clear all button
+              if (hasFilters) ...[
+                const SizedBox(width: AdminSpacing.sm),
+                IconButton(
+                  onPressed: onClearAll,
+                  icon: const Icon(Icons.clear_all, size: 20),
+                  tooltip: 'Clear all filters',
+                  style: IconButton.styleFrom(
+                    foregroundColor: AdminColors.textMuted,
+                  ),
+                ),
+              ],
+            ],
+          ),
+
+          // SKU dimension dropdowns (opt-in per widget)
+          if (dims != null &&
+              (dims.companies.isNotEmpty ||
+                  dims.brands.isNotEmpty ||
+                  dims.packages.isNotEmpty ||
+                  dims.sizes.isNotEmpty)) ...[
+            const SizedBox(height: AdminSpacing.sm),
+            Wrap(
+              spacing: AdminSpacing.sm,
+              runSpacing: AdminSpacing.sm,
+              children: [
+                if (onCompanyChanged != null && dims.companies.isNotEmpty)
+                  SizedBox(
+                    width: 170,
+                    child: _buildDropdown(
+                      label: 'Company',
+                      value: selectedCompany,
+                      hint: 'All companies',
+                      items: dims.companies,
+                      onChanged: onCompanyChanged!,
+                    ),
+                  ),
+                if (onBrandChanged != null && dims.brands.isNotEmpty)
+                  SizedBox(
+                    width: 170,
+                    child: _buildDropdown(
+                      label: 'Brand',
+                      value: selectedBrand,
+                      hint: 'All brands',
+                      items: dims.brands,
+                      onChanged: onBrandChanged!,
+                    ),
+                  ),
+                if (onPackageChanged != null && dims.packages.isNotEmpty)
+                  SizedBox(
+                    width: 150,
+                    child: _buildDropdown(
+                      label: 'Package',
+                      value: selectedPackage,
+                      hint: 'All packages',
+                      items: dims.packages,
+                      onChanged: onPackageChanged!,
+                    ),
+                  ),
+                if (onSizeChanged != null && dims.sizes.isNotEmpty)
+                  SizedBox(
+                    width: 130,
+                    child: _buildDropdown(
+                      label: 'Size',
+                      value: selectedSize,
+                      hint: 'All sizes',
+                      items: dims.sizes,
+                      onChanged: onSizeChanged!,
+                    ),
+                  ),
+              ],
             ),
           ],
         ],

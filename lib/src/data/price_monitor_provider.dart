@@ -861,14 +861,21 @@ String _normalizedProductName(String name) =>
 final availabilityVsPriceProvider =
     FutureProvider.family<List<AvailabilityPriceRow>, PriceFilterParams>(
         (ref, params) async {
+  // Thread the caller's filters through both sides so the join reflects the
+  // same slice of data (previously only missionId was passed).
   final availability = await ref.watch(skuAvailabilityForWidgetProvider(
-    WidgetFilterParams(missionId: params.missionId),
+    WidgetFilterParams(
+      missionId: params.missionId,
+      city: params.city,
+      channel: params.channel,
+      startDate: params.startDate,
+      endDate: params.endDate,
+    ),
   ).future);
   if (availability.isEmpty) return [];
 
-  final observations = await ref.watch(rawPriceObservationsProvider(
-    PriceFilterParams(missionId: params.missionId),
-  ).future);
+  final observations =
+      await ref.watch(rawPriceObservationsProvider(params).future);
 
   final pricesByName = <String, List<double>>{};
   final countsByName = <String, int>{};

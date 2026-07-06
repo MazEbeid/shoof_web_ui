@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
@@ -11,12 +13,17 @@ import '../../theme/admin_typography.dart';
 
 /// Availability Analysis Widget
 ///
-/// Two views:
-/// - "By SKU": per-SKU availability ranking (worst first)
-/// - "SKU x Channel": heatmap matrix of availability % per SKU per channel
+/// Metric: STORES ("X of Y stores currently stock it") - each store counts
+/// once and its most recent visit decides the state, no matter how many
+/// times it was visited.
 ///
-/// Self-contained with local filter state - no global dependencies.
-/// Rendered by both ShooofAdmin (builder/preview) and shoof_insights (client).
+/// Two views:
+/// - "By SKU": per-SKU store availability ranking (worst first)
+/// - "SKU x Channel": heatmap matrix of store availability % per channel
+///
+/// Self-contained with local filter state (city/channel/date + company/
+/// brand/package/size). Self-sizing: long lists expand the widget so the
+/// page scrolls instead of trapping an inner scrollbar.
 class AvailabilityAnalysisWidget extends HookConsumerWidget {
   final String missionId;
   final String title;
@@ -31,13 +38,20 @@ class AvailabilityAnalysisWidget extends HookConsumerWidget {
     this.subtitleAr,
   });
 
+  static const int _previewRowCount = 8;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final showHeatmap = useState(false);
+    final showAll = useState(false);
 
     // Local filter state
     final selectedCity = useState<String?>(null);
     final selectedChannel = useState<String?>(null);
+    final selectedCompany = useState<String?>(null);
+    final selectedBrand = useState<String?>(null);
+    final selectedPackage = useState<String?>(null);
+    final selectedSize = useState<String?>(null);
     final startDate = useState<DateTime?>(null);
     final endDate = useState<DateTime?>(null);
 
@@ -46,6 +60,10 @@ class AvailabilityAnalysisWidget extends HookConsumerWidget {
       missionId: missionId,
       city: selectedCity.value,
       channel: selectedChannel.value,
+      company: selectedCompany.value,
+      brand: selectedBrand.value,
+      package: selectedPackage.value,
+      size: selectedSize.value,
       startDate: startDate.value,
       endDate: endDate.value,
     );
@@ -53,7 +71,6 @@ class AvailabilityAnalysisWidget extends HookConsumerWidget {
     final allSkus = ref.watch(skuAvailabilityForWidgetProvider(filterParams));
 
     return Container(
-      height: AdminSpacing.widgetMedium,
       padding: const EdgeInsets.all(AdminSpacing.lg),
       decoration: BoxDecoration(
         color: AdminColors.surface,
@@ -62,6 +79,7 @@ class AvailabilityAnalysisWidget extends HookConsumerWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           // Header
           Row(
@@ -102,8 +120,9 @@ class AvailabilityAnalysisWidget extends HookConsumerWidget {
           const SizedBox(height: AdminSpacing.sm),
           Text(
             showHeatmap.value
-                ? '% of checks where the SKU was in stock, per channel'
-                : 'Per-SKU availability based on individual store checks',
+                ? '% of stores currently stocking the SKU, per channel '
+                    '(latest visit per store)'
+                : 'Per-SKU availability across stores (latest visit per store)',
             style: AdminTextStyles.bodySmall.copyWith(
               color: AdminColors.textMuted,
             ),
@@ -115,11 +134,19 @@ class AvailabilityAnalysisWidget extends HookConsumerWidget {
             missionId: missionId,
             selectedCity: selectedCity.value,
             selectedChannel: selectedChannel.value,
+            selectedCompany: selectedCompany.value,
+            selectedBrand: selectedBrand.value,
+            selectedPackage: selectedPackage.value,
+            selectedSize: selectedSize.value,
             startDate: startDate.value,
             endDate: endDate.value,
             hasFilters: filterParams.hasFilters,
             onCityChanged: (city) => selectedCity.value = city,
             onChannelChanged: (channel) => selectedChannel.value = channel,
+            onCompanyChanged: (company) => selectedCompany.value = company,
+            onBrandChanged: (brand) => selectedBrand.value = brand,
+            onPackageChanged: (package) => selectedPackage.value = package,
+            onSizeChanged: (size) => selectedSize.value = size,
             onDateRangeChanged: (range) {
               startDate.value = range?.start;
               endDate.value = range?.end;
@@ -127,6 +154,10 @@ class AvailabilityAnalysisWidget extends HookConsumerWidget {
             onClearAll: () {
               selectedCity.value = null;
               selectedChannel.value = null;
+              selectedCompany.value = null;
+              selectedBrand.value = null;
+              selectedPackage.value = null;
+              selectedSize.value = null;
               startDate.value = null;
               endDate.value = null;
             },
@@ -134,11 +165,18 @@ class AvailabilityAnalysisWidget extends HookConsumerWidget {
           const SizedBox(height: AdminSpacing.md),
 
           // Body
-          Expanded(
-            child: showHeatmap.value
-                ? _SkuChannelHeatmap(filterParams: filterParams)
-                : _SkuRankedList(allSkus: allSkus),
-          ),
+          if (showHeatmap.value)
+            _SkuChannelHeatmap(
+              filterParams: filterParams,
+              showAll: showAll.value,
+              onToggleShowAll: () => showAll.value = !showAll.value,
+            )
+          else
+            _SkuRankedList(
+              allSkus: allSkus,
+              showAll: showAll.value,
+              onToggleShowAll: () => showAll.value = !showAll.value,
+            ),
 
           // Subtitle
           if (subtitle != null && subtitle!.isNotEmpty) ...[
@@ -151,6 +189,38 @@ class AvailabilityAnalysisWidget extends HookConsumerWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// "Show all N" / "Show top N" toggle used by both views.
+class _ShowAllToggle extends StatelessWidget {
+  final int totalCount;
+  final bool showAll;
+  final VoidCallback onTap;
+
+  const _ShowAllToggle({
+    required this.totalCount,
+    required this.showAll,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.center,
+      child: TextButton.icon(
+        onPressed: onTap,
+        icon: Icon(
+          showAll ? Icons.expand_less : Icons.expand_more,
+          size: 18,
+        ),
+        label: Text(
+          showAll
+              ? 'Show top ${AvailabilityAnalysisWidget._previewRowCount}'
+              : 'Show all $totalCount rows',
+        ),
       ),
     );
   }
@@ -241,245 +311,260 @@ class _ToggleButton extends StatelessWidget {
   }
 }
 
-/// Ranked list view: worst-availability SKUs first.
+/// Ranked list view: worst-availability SKUs first (store-level).
 class _SkuRankedList extends StatelessWidget {
   final AsyncValue<List<SkuAvailability>> allSkus;
+  final bool showAll;
+  final VoidCallback onToggleShowAll;
 
-  const _SkuRankedList({required this.allSkus});
+  const _SkuRankedList({
+    required this.allSkus,
+    required this.showAll,
+    required this.onToggleShowAll,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Column headers
-        Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: AdminSpacing.sm, vertical: AdminSpacing.xs),
-          decoration: BoxDecoration(
-            color: AdminColors.backgroundPage,
-            borderRadius: AdminRadius.smAll,
-          ),
-          child: Row(
-            children: [
-              const SizedBox(width: 32), // Rank column
-              Expanded(
-                flex: 3,
-                child: Text(
-                  'SKU',
-                  style: AdminTextStyles.labelSmall.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: 80,
-                child: Text(
-                  'Package',
-                  textAlign: TextAlign.center,
-                  style: AdminTextStyles.labelSmall.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: 100,
-                child: Text(
-                  'Checks',
-                  textAlign: TextAlign.center,
-                  style: AdminTextStyles.labelSmall.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: 70,
-                child: Text(
-                  'Rate',
-                  textAlign: TextAlign.right,
-                  style: AdminTextStyles.labelSmall.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
+    return allSkus.when(
+      loading: () => const SizedBox(
+        height: 160,
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      ),
+      error: (e, _) => SizedBox(
+        height: 120,
+        child: Center(
+          child: Text(
+            'Error loading data: $e',
+            style: AdminTextStyles.bodySmall.copyWith(color: AdminColors.error),
+            textAlign: TextAlign.center,
           ),
         ),
-        const SizedBox(height: AdminSpacing.xs),
-
-        // SKU list
-        Expanded(
-          child: allSkus.when(
-            data: (skus) {
-              if (skus.isEmpty) {
-                return Center(
-                  child: Text(
-                    'No SKU data available',
-                    style: AdminTextStyles.bodySmall.copyWith(
-                      color: AdminColors.textMuted,
-                    ),
-                  ),
-                );
-              }
-
-              // Sort by availability rate (worst first)
-              final sorted = List<SkuAvailability>.from(skus)
-                ..sort(
-                    (a, b) => a.availabilityRate.compareTo(b.availabilityRate));
-
-              return ListView.builder(
-                itemCount: sorted.length,
-                itemBuilder: (context, index) {
-                  final sku = sorted[index];
-                  final rate = sku.availabilityRate;
-                  final color = _getColorForRate(rate);
-
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 4),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AdminSpacing.sm,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.04),
-                      borderRadius: AdminRadius.smAll,
-                      border:
-                          Border.all(color: color.withValues(alpha: 0.15)),
-                    ),
-                    child: Row(
-                      children: [
-                        // Rank
-                        Container(
-                          width: 24,
-                          height: 24,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${index + 1}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: color,
-                              ),
-                            ),
-                          ),
-                        ),
-                        // SKU info
-                        Expanded(
-                          flex: 3,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                sku.skuEnglish,
-                                style: AdminTextStyles.bodySmall.copyWith(
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              Text(
-                                '${sku.brand} · ${sku.company}',
-                                style: AdminTextStyles.bodySmall.copyWith(
-                                  color: AdminColors.textMuted,
-                                  fontSize: 10,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Package
-                        SizedBox(
-                          width: 80,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: _getColorForPackage(sku.package)
-                                  .withValues(alpha: 0.1),
-                              borderRadius: AdminRadius.smAll,
-                            ),
-                            child: Text(
-                              sku.package,
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                                color: _getColorForPackage(sku.package),
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                        // Check counts
-                        SizedBox(
-                          width: 100,
-                          child: Column(
-                            children: [
-                              Text(
-                                '${sku.availableCount} / ${sku.totalChecks}',
-                                textAlign: TextAlign.center,
-                                style: AdminTextStyles.bodySmall.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                'found / checked',
-                                textAlign: TextAlign.center,
-                                style: AdminTextStyles.bodySmall.copyWith(
-                                  color: AdminColors.textMuted,
-                                  fontSize: 8,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Rate badge
-                        Container(
-                          width: 70,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.15),
-                            borderRadius: AdminRadius.smAll,
-                          ),
-                          child: Text(
-                            '${rate.toStringAsFixed(0)}%',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: color,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              );
-            },
-            loading: () => const Center(
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            error: (e, _) => Center(
+      ),
+      data: (skus) {
+        if (skus.isEmpty) {
+          return SizedBox(
+            height: 120,
+            child: Center(
               child: Text(
-                'Error loading data',
+                'No SKU data available',
                 style: AdminTextStyles.bodySmall.copyWith(
-                  color: AdminColors.error,
+                  color: AdminColors.textMuted,
+                ),
+              ),
+            ),
+          );
+        }
+
+        // Sort by availability rate (worst first)
+        final sorted = List<SkuAvailability>.from(skus)
+          ..sort((a, b) => a.availabilityRate.compareTo(b.availabilityRate));
+        final visible = showAll
+            ? sorted
+            : sorted.take(AvailabilityAnalysisWidget._previewRowCount).toList();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Column headers
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AdminSpacing.sm, vertical: AdminSpacing.xs),
+              decoration: BoxDecoration(
+                color: AdminColors.backgroundPage,
+                borderRadius: AdminRadius.smAll,
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(width: 32), // Rank column
+                  Expanded(
+                    flex: 3,
+                    child: Text(
+                      'SKU',
+                      style: AdminTextStyles.labelSmall.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 80,
+                    child: Text(
+                      'Package',
+                      textAlign: TextAlign.center,
+                      style: AdminTextStyles.labelSmall.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 100,
+                    child: Text(
+                      'Stores',
+                      textAlign: TextAlign.center,
+                      style: AdminTextStyles.labelSmall.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 70,
+                    child: Text(
+                      'Rate',
+                      textAlign: TextAlign.right,
+                      style: AdminTextStyles.labelSmall.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AdminSpacing.xs),
+
+            for (var index = 0; index < visible.length; index++)
+              _buildRow(index, visible[index]),
+
+            if (sorted.length > AvailabilityAnalysisWidget._previewRowCount)
+              _ShowAllToggle(
+                totalCount: sorted.length,
+                showAll: showAll,
+                onTap: onToggleShowAll,
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildRow(int index, SkuAvailability sku) {
+    final rate = sku.availabilityRate;
+    final color = _getColorForRate(rate);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AdminSpacing.sm,
+        vertical: 8,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.04),
+        borderRadius: AdminRadius.smAll,
+        border: Border.all(color: color.withValues(alpha: 0.15)),
+      ),
+      child: Row(
+        children: [
+          // Rank
+          Container(
+            width: 24,
+            height: 24,
+            margin: const EdgeInsets.only(right: 8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Center(
+              child: Text(
+                '${index + 1}',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: color,
                 ),
               ),
             ),
           ),
-        ),
-      ],
+          // SKU info
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  sku.skuEnglish,
+                  style: AdminTextStyles.bodySmall.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  '${sku.brand} · ${sku.company}',
+                  style: AdminTextStyles.bodySmall.copyWith(
+                    color: AdminColors.textMuted,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Package
+          SizedBox(
+            width: 80,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: _getColorForPackage(sku.package).withValues(alpha: 0.1),
+                borderRadius: AdminRadius.smAll,
+              ),
+              child: Text(
+                sku.package,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: _getColorForPackage(sku.package),
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          // Store counts (latest visit per store)
+          SizedBox(
+            width: 100,
+            child: Column(
+              children: [
+                Text(
+                  '${sku.availableCount} / ${sku.totalChecks}',
+                  textAlign: TextAlign.center,
+                  style: AdminTextStyles.bodySmall.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  'stocking / stores',
+                  textAlign: TextAlign.center,
+                  style: AdminTextStyles.bodySmall.copyWith(
+                    color: AdminColors.textMuted,
+                    fontSize: 8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Rate badge
+          Container(
+            width: 70,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 4,
+            ),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.15),
+              borderRadius: AdminRadius.smAll,
+            ),
+            child: Text(
+              '${rate.toStringAsFixed(0)}%',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -507,14 +592,22 @@ class _SkuRankedList extends StatelessWidget {
   }
 }
 
-/// Heatmap view: availability % per SKU per channel, worst SKUs first.
+/// Heatmap view: store availability % per SKU per channel, worst SKUs first.
+/// Columns stretch to fill the parent; horizontal scroll only when the
+/// natural width exceeds it.
 class _SkuChannelHeatmap extends ConsumerWidget {
   final WidgetFilterParams filterParams;
+  final bool showAll;
+  final VoidCallback onToggleShowAll;
 
-  const _SkuChannelHeatmap({required this.filterParams});
+  const _SkuChannelHeatmap({
+    required this.filterParams,
+    required this.showAll,
+    required this.onToggleShowAll,
+  });
 
   static const double _skuColWidth = 180;
-  static const double _channelColWidth = 88;
+  static const double _minChannelColWidth = 88;
   static const double _avgColWidth = 64;
 
   @override
@@ -523,21 +616,31 @@ class _SkuChannelHeatmap extends ConsumerWidget {
         ref.watch(skuChannelAvailabilityForWidgetProvider(filterParams));
 
     return cellsAsync.when(
-      loading: () =>
-          const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-      error: (e, _) => Center(
-        child: Text(
-          'Error loading data',
-          style: AdminTextStyles.bodySmall.copyWith(color: AdminColors.error),
+      loading: () => const SizedBox(
+        height: 160,
+        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      ),
+      error: (e, _) => SizedBox(
+        height: 120,
+        child: Center(
+          child: Text(
+            'Error loading data: $e',
+            style:
+                AdminTextStyles.bodySmall.copyWith(color: AdminColors.error),
+            textAlign: TextAlign.center,
+          ),
         ),
       ),
       data: (cells) {
         if (cells.isEmpty) {
-          return Center(
-            child: Text(
-              'No SKU data available',
-              style: AdminTextStyles.bodySmall.copyWith(
-                color: AdminColors.textMuted,
+          return SizedBox(
+            height: 120,
+            child: Center(
+              child: Text(
+                'No SKU data available',
+                style: AdminTextStyles.bodySmall.copyWith(
+                  color: AdminColors.textMuted,
+                ),
               ),
             ),
           );
@@ -567,73 +670,86 @@ class _SkuChannelHeatmap extends ConsumerWidget {
         final skus = matrix.keys.toList()
           ..sort((a, b) =>
               overallRate(matrix[a]!).compareTo(overallRate(matrix[b]!)));
+        final visibleSkus = showAll
+            ? skus
+            : skus.take(AvailabilityAnalysisWidget._previewRowCount).toList();
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SizedBox(
-                  width: _skuColWidth +
-                      channels.length * _channelColWidth +
-                      _avgColWidth,
-                  child: Column(
-                    children: [
-                      // Header row
-                      Row(
-                        children: [
-                          _headerCell('SKU', _skuColWidth,
-                              align: TextAlign.left),
-                          for (final channel in channels)
-                            _headerCell(channel, _channelColWidth),
-                          _headerCell('Avg', _avgColWidth),
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Expanded(
-                        child: ListView.builder(
-                          itemCount: skus.length,
-                          itemBuilder: (context, index) {
-                            final sku = skus[index];
-                            final row = matrix[sku]!;
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 3),
-                              child: Row(
-                                children: [
-                                  SizedBox(
-                                    width: _skuColWidth,
-                                    child: Padding(
-                                      padding:
-                                          const EdgeInsets.only(right: 8),
-                                      child: Text(
-                                        sku,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: AdminTextStyles.bodySmall
-                                            .copyWith(
-                                          fontWeight: FontWeight.w600,
-                                        ),
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            // Stretch channels to fill the parent; never below the minimum.
+            final channelWidth = math.max(
+              _minChannelColWidth,
+              (constraints.maxWidth - _skuColWidth - _avgColWidth) /
+                  channels.length,
+            );
+            final naturalWidth =
+                _skuColWidth + channels.length * channelWidth + _avgColWidth;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: SizedBox(
+                    width: naturalWidth,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Header row
+                        Row(
+                          children: [
+                            _headerCell('SKU', _skuColWidth,
+                                align: TextAlign.left),
+                            for (final channel in channels)
+                              _headerCell(channel, channelWidth),
+                            _headerCell('Avg', _avgColWidth),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        for (final sku in visibleSkus)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 3),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: _skuColWidth,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: Text(
+                                      sku,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style:
+                                          AdminTextStyles.bodySmall.copyWith(
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                   ),
-                                  for (final channel in channels)
-                                    _rateCell(sku, channel, row[channel]),
-                                  _avgCell(overallRate(row)),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
+                                ),
+                                for (final channel in channels)
+                                  _rateCell(sku, channel, matrix[sku]![channel],
+                                      channelWidth),
+                                _avgCell(overallRate(matrix[sku]!)),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(height: AdminSpacing.sm),
-            _buildLegend(),
-          ],
+                if (skus.length >
+                    AvailabilityAnalysisWidget._previewRowCount)
+                  _ShowAllToggle(
+                    totalCount: skus.length,
+                    showAll: showAll,
+                    onTap: onToggleShowAll,
+                  ),
+                const SizedBox(height: AdminSpacing.sm),
+                _buildLegend(),
+              ],
+            );
+          },
         );
       },
     );
@@ -659,10 +775,11 @@ class _SkuChannelHeatmap extends ConsumerWidget {
     );
   }
 
-  Widget _rateCell(String sku, String channel, SkuChannelAvailability? cell) {
+  Widget _rateCell(String sku, String channel, SkuChannelAvailability? cell,
+      double width) {
     if (cell == null || cell.totalChecks == 0) {
       return SizedBox(
-        width: _channelColWidth,
+        width: width,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 3),
           child: Container(
@@ -685,12 +802,12 @@ class _SkuChannelHeatmap extends ConsumerWidget {
 
     final rate = cell.availabilityRate;
     return SizedBox(
-      width: _channelColWidth,
+      width: width,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 3),
         child: Tooltip(
           message:
-              '$sku\n$channel · ${cell.availableCount}/${cell.totalChecks} in stock',
+              '$sku\n$channel · ${cell.availableCount}/${cell.totalChecks} stores stocking',
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 10),
             decoration: BoxDecoration(
@@ -762,7 +879,7 @@ class _SkuChannelHeatmap extends ConsumerWidget {
         ),
         const SizedBox(width: 8),
         Text(
-          'High · cell = availability %',
+          'High · cell = % of stores stocking',
           style: AdminTextStyles.labelSmall.copyWith(
             color: AdminColors.textSecondary,
           ),
