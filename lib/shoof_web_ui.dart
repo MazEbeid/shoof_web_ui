@@ -63,5 +63,8 @@ export 'src/widgets/dashboard/price_comparison_widget.dart';
 export 'src/widgets/dashboard/price_range_widget.dart';
 export 'src/widgets/dashboard/price_movers_widget.dart';
 export 'src/widgets/dashboard/availability_vs_price_widget.dart';
+export 'src/widgets/dashboard/availability_analysis_widget.dart';
 export 'src/widgets/dashboard/coverage_map_widget.dart';
+export 'src/widgets/dashboard/mission_overview_widget.dart';
+export 'src/widgets/dashboard/section_widget.dart';
 export 'src/widgets/dashboard/widget_filters_row.dart';

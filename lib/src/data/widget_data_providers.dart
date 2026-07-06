@@ -248,3 +248,381 @@ final skuAvailabilityForWidgetProvider =
     return [];
   }
 });
+
+/// One cell of the SKU x Channel availability matrix.
+class SkuChannelAvailability {
+  final String skuEnglish;
+  final String channel;
+  final int totalChecks;
+  final int availableCount;
+
+  const SkuChannelAvailability({
+    required this.skuEnglish,
+    required this.channel,
+    required this.totalChecks,
+    required this.availableCount,
+  });
+
+  double get availabilityRate =>
+      totalChecks == 0 ? 0 : availableCount / totalChecks * 100;
+}
+
+/// Availability broken out by SKU AND channel (both dimensions).
+///
+/// Strategy:
+/// 1. Try RPC fn_sku_channel_availability (see supabase_dashboard_views.sql)
+/// 2. Fall back to client-side aggregation over v_sku_availability_detail
+final skuChannelAvailabilityForWidgetProvider =
+    FutureProvider.family<List<SkuChannelAvailability>, WidgetFilterParams>(
+        (ref, params) async {
+  final supabase = ref.watch(sharedSupabaseProvider);
+
+  try {
+    try {
+      final rpcResponse =
+          await supabase.rpc('fn_sku_channel_availability', params: {
+        'p_mission_id': params.missionId,
+        'p_city': params.city,
+        'p_channel': params.channel,
+        'p_start_date': params.startDate?.toIso8601String().split('T')[0],
+        'p_end_date': params.endDate?.toIso8601String().split('T')[0],
+      });
+
+      return (rpcResponse as List)
+          .map((e) => SkuChannelAvailability(
+                skuEnglish: e['sku_english'] ?? 'Unknown',
+                channel: e['channel'] ?? 'Unknown',
+                totalChecks: (e['total_checks'] as num?)?.toInt() ?? 0,
+                availableCount: (e['available_count'] as num?)?.toInt() ?? 0,
+              ))
+          .toList();
+    } catch (rpcError) {
+      // Function not deployed yet - fall back to client-side aggregation
+    }
+
+    var query = supabase
+        .from('v_sku_availability_detail')
+        .select('sku_english, channel, place_type, is_available')
+        .eq('mission_id', params.missionId)
+        .not('sku_english', 'is', null);
+
+    if (params.city != null) {
+      query = query.eq('city', params.city!);
+    }
+    if (params.channel != null) {
+      query = query.eq('channel', params.channel!);
+    }
+    if (params.startDate != null) {
+      query = query.gte(
+          'observed_date', params.startDate!.toIso8601String().split('T')[0]);
+    }
+    if (params.endDate != null) {
+      query = query.lte(
+          'observed_date', params.endDate!.toIso8601String().split('T')[0]);
+    }
+
+    final response = await query.limit(100000);
+    final data = response as List;
+
+    // sku -> channel -> [totalChecks, availableCount]
+    final matrix = <String, Map<String, List<int>>>{};
+    for (final row in data) {
+      final sku = row['sku_english'] as String?;
+      final channel =
+          (row['channel'] as String?) ?? (row['place_type'] as String?);
+      if (sku == null || channel == null) continue;
+      final cell = matrix
+          .putIfAbsent(sku, () => {})
+          .putIfAbsent(channel, () => [0, 0]);
+      cell[0]++;
+      if (row['is_available'] == true) cell[1]++;
+    }
+
+    return [
+      for (final skuEntry in matrix.entries)
+        for (final channelEntry in skuEntry.value.entries)
+          SkuChannelAvailability(
+            skuEnglish: skuEntry.key,
+            channel: channelEntry.key,
+            totalChecks: channelEntry.value[0],
+            availableCount: channelEntry.value[1],
+          ),
+    ];
+  } catch (e) {
+    return [];
+  }
+});
+
+/// Chart data point for pie/bar charts
+class ChartDataPoint {
+  final String label;
+  final double value;
+
+  const ChartDataPoint({required this.label, required this.value});
+}
+
+/// Mission overview data model
+class MissionOverviewData {
+  final String clientId;
+  final String missionId;
+  final int totalSubmissions;
+  final int totalAnswers;
+  final int citiesCount;
+  final int locationTypesCount;
+  final int collectorsCount;
+  final DateTime? firstSubmission;
+  final DateTime? lastSubmission;
+
+  const MissionOverviewData({
+    required this.clientId,
+    required this.missionId,
+    required this.totalSubmissions,
+    required this.totalAnswers,
+    required this.citiesCount,
+    required this.locationTypesCount,
+    required this.collectorsCount,
+    this.firstSubmission,
+    this.lastSubmission,
+  });
+
+  factory MissionOverviewData.fromMap(Map<String, dynamic> map) {
+    return MissionOverviewData(
+      clientId: map['client_id'] ?? '',
+      missionId: map['mission_id'] ?? '',
+      totalSubmissions: map['total_submissions'] ?? 0,
+      totalAnswers: map['total_answers'] ?? 0,
+      citiesCount: map['cities_count'] ?? 0,
+      locationTypesCount: map['location_types_count'] ?? 0,
+      collectorsCount: map['collectors_count'] ?? 0,
+      firstSubmission: map['first_submission'] != null
+          ? DateTime.tryParse(map['first_submission'])
+          : null,
+      lastSubmission: map['last_submission'] != null
+          ? DateTime.tryParse(map['last_submission'])
+          : null,
+    );
+  }
+}
+
+/// Mission overview provider - accepts WidgetFilterParams for filtering
+///
+/// Strategy:
+/// 1. No filters: use fast aggregate view v_mission_overview
+/// 2. With filters: try RPC fn_mission_overview_filtered, fall back to
+///    client-side aggregation
+final missionOverviewForWidgetProvider =
+    FutureProvider.family<MissionOverviewData?, WidgetFilterParams>(
+        (ref, params) async {
+  final supabase = ref.watch(sharedSupabaseProvider);
+
+  try {
+    if (!params.hasFilters) {
+      final response = await supabase
+          .from('v_mission_overview')
+          .select()
+          .eq('mission_id', params.missionId)
+          .maybeSingle();
+
+      if (response == null) return null;
+      return MissionOverviewData.fromMap(response);
+    }
+
+    try {
+      final rpcResponse =
+          await supabase.rpc('fn_mission_overview_filtered', params: {
+        'p_mission_id': params.missionId,
+        'p_city': params.city,
+        'p_channel': params.channel,
+        'p_start_date': params.startDate?.toIso8601String().split('T')[0],
+        'p_end_date': params.endDate?.toIso8601String().split('T')[0],
+      });
+
+      if (rpcResponse != null && (rpcResponse as List).isNotEmpty) {
+        final row = rpcResponse[0];
+        return MissionOverviewData(
+          clientId: '',
+          missionId: params.missionId,
+          totalSubmissions: row['total_submissions'] ?? 0,
+          totalAnswers: row['total_answers'] ?? 0,
+          citiesCount: row['cities_count'] ?? 0,
+          locationTypesCount: row['location_types_count'] ?? 0,
+          collectorsCount: row['collectors_count'] ?? 0,
+        );
+      }
+    } catch (rpcError) {
+      // Function not deployed - fall back to client-side aggregation
+    }
+
+    var query = supabase
+        .from('submission_answers')
+        .select('submission_id, city, channel, crowd_id')
+        .eq('mission_id', params.missionId)
+        .eq('qa_status', 'accepted');
+
+    if (params.city != null) {
+      query = query.eq('city', params.city!);
+    }
+    if (params.channel != null) {
+      query = query.eq('channel', params.channel!);
+    }
+    if (params.startDate != null) {
+      query = query.gte(
+          'observed_date', params.startDate!.toIso8601String().split('T')[0]);
+    }
+    if (params.endDate != null) {
+      query = query.lte(
+          'observed_date', params.endDate!.toIso8601String().split('T')[0]);
+    }
+
+    final response = await query;
+    final data = response as List;
+
+    final submissions = data.map((e) => e['submission_id']).toSet();
+    final cities = data.map((e) => e['city']).whereType<String>().toSet();
+    final channels = data.map((e) => e['channel']).whereType<String>().toSet();
+    final collectors = data.map((e) => e['crowd_id']).whereType<String>().toSet();
+
+    return MissionOverviewData(
+      clientId: '',
+      missionId: params.missionId,
+      totalSubmissions: submissions.length,
+      totalAnswers: data.length,
+      citiesCount: cities.length,
+      locationTypesCount: channels.length,
+      collectorsCount: collectors.length,
+    );
+  } catch (e) {
+    return null;
+  }
+});
+
+/// City breakdown for a mission - accepts WidgetFilterParams for filtering
+final cityBreakdownForWidgetProvider =
+    FutureProvider.family<List<ChartDataPoint>, WidgetFilterParams>(
+        (ref, params) async {
+  final supabase = ref.watch(sharedSupabaseProvider);
+
+  try {
+    if (!params.hasFilters) {
+      final response = await supabase
+          .from('v_city_breakdown')
+          .select('city, submission_count')
+          .eq('mission_id', params.missionId);
+
+      final data = response as List;
+      return data
+          .map((row) => ChartDataPoint(
+                label: row['city'] as String,
+                value: (row['submission_count'] as int).toDouble(),
+              ))
+          .toList();
+    }
+
+    var query = supabase
+        .from('submission_answers')
+        .select('submission_id, city')
+        .eq('mission_id', params.missionId)
+        .eq('qa_status', 'accepted')
+        .not('city', 'is', null);
+
+    if (params.city != null) {
+      query = query.eq('city', params.city!);
+    }
+    if (params.channel != null) {
+      query = query.eq('channel', params.channel!);
+    }
+    if (params.startDate != null) {
+      query = query.gte(
+          'observed_date', params.startDate!.toIso8601String().split('T')[0]);
+    }
+    if (params.endDate != null) {
+      query = query.lte(
+          'observed_date', params.endDate!.toIso8601String().split('T')[0]);
+    }
+
+    final response = await query;
+    final data = response as List;
+
+    // Group by city and count unique submissions
+    final cityMap = <String, Set<String>>{};
+    for (final row in data) {
+      final city = row['city'] as String?;
+      final submissionId = row['submission_id'] as String?;
+      if (city != null && submissionId != null) {
+        cityMap.putIfAbsent(city, () => {}).add(submissionId);
+      }
+    }
+
+    return cityMap.entries
+        .map((e) =>
+            ChartDataPoint(label: e.key, value: e.value.length.toDouble()))
+        .toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+  } catch (e) {
+    return [];
+  }
+});
+
+/// Channel breakdown for a mission - accepts WidgetFilterParams for filtering
+final channelBreakdownForWidgetProvider =
+    FutureProvider.family<List<ChartDataPoint>, WidgetFilterParams>(
+        (ref, params) async {
+  final supabase = ref.watch(sharedSupabaseProvider);
+
+  try {
+    if (!params.hasFilters) {
+      final response = await supabase
+          .from('v_channel_breakdown')
+          .select('channel, submission_count')
+          .eq('mission_id', params.missionId);
+
+      final data = response as List;
+      return data
+          .map((row) => ChartDataPoint(
+                label: row['channel'] as String,
+                value: (row['submission_count'] as int).toDouble(),
+              ))
+          .toList();
+    }
+
+    var query = supabase
+        .from('submission_answers')
+        .select('submission_id, channel')
+        .eq('mission_id', params.missionId)
+        .eq('qa_status', 'accepted')
+        .not('channel', 'is', null);
+
+    if (params.city != null) {
+      query = query.eq('city', params.city!);
+    }
+    if (params.startDate != null) {
+      query = query.gte(
+          'observed_date', params.startDate!.toIso8601String().split('T')[0]);
+    }
+    if (params.endDate != null) {
+      query = query.lte(
+          'observed_date', params.endDate!.toIso8601String().split('T')[0]);
+    }
+
+    final response = await query;
+    final data = response as List;
+
+    // Group by channel and count unique submissions
+    final channelMap = <String, Set<String>>{};
+    for (final row in data) {
+      final channel = row['channel'] as String?;
+      final submissionId = row['submission_id'] as String?;
+      if (channel != null && submissionId != null) {
+        channelMap.putIfAbsent(channel, () => {}).add(submissionId);
+      }
+    }
+
+    return channelMap.entries
+        .map((e) =>
+            ChartDataPoint(label: e.key, value: e.value.length.toDouble()))
+        .toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+  } catch (e) {
+    return [];
+  }
+});
