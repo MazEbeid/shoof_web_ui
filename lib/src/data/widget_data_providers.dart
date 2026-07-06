@@ -271,7 +271,9 @@ class SkuChannelAvailability {
 ///
 /// Strategy:
 /// 1. Try RPC fn_sku_channel_availability (see supabase_dashboard_views.sql)
-/// 2. Fall back to client-side aggregation over v_sku_availability_detail
+/// 2. Fall back to client-side aggregation over the sku_availability table -
+///    the same source v_availability_by_sku (the "By SKU" list) is built from.
+///    SKU names are upper/trimmed to match that matview's normalization.
 final skuChannelAvailabilityForWidgetProvider =
     FutureProvider.family<List<SkuChannelAvailability>, WidgetFilterParams>(
         (ref, params) async {
@@ -288,7 +290,7 @@ final skuChannelAvailabilityForWidgetProvider =
         'p_end_date': params.endDate?.toIso8601String().split('T')[0],
       });
 
-      return (rpcResponse as List)
+      final rows = (rpcResponse as List)
           .map((e) => SkuChannelAvailability(
                 skuEnglish: e['sku_english'] ?? 'Unknown',
                 channel: e['channel'] ?? 'Unknown',
@@ -296,15 +298,19 @@ final skuChannelAvailabilityForWidgetProvider =
                 availableCount: (e['available_count'] as num?)?.toInt() ?? 0,
               ))
           .toList();
+      if (rows.isNotEmpty) return rows;
+      // Empty could mean the deployed function predates the sku_availability
+      // rewrite - let the fallback decide.
     } catch (rpcError) {
       // Function not deployed yet - fall back to client-side aggregation
     }
 
     var query = supabase
-        .from('v_sku_availability_detail')
-        .select('sku_english, channel, place_type, is_available')
+        .from('sku_availability')
+        .select('sku_english, channel, available')
         .eq('mission_id', params.missionId)
-        .not('sku_english', 'is', null);
+        .not('sku_english', 'is', null)
+        .not('channel', 'is', null);
 
     if (params.city != null) {
       query = query.eq('city', params.city!);
@@ -327,15 +333,16 @@ final skuChannelAvailabilityForWidgetProvider =
     // sku -> channel -> [totalChecks, availableCount]
     final matrix = <String, Map<String, List<int>>>{};
     for (final row in data) {
-      final sku = row['sku_english'] as String?;
-      final channel =
-          (row['channel'] as String?) ?? (row['place_type'] as String?);
-      if (sku == null || channel == null) continue;
+      final sku = (row['sku_english'] as String?)?.trim().toUpperCase();
+      final channel = (row['channel'] as String?)?.trim();
+      if (sku == null || sku.isEmpty || channel == null || channel.isEmpty) {
+        continue;
+      }
       final cell = matrix
           .putIfAbsent(sku, () => {})
           .putIfAbsent(channel, () => [0, 0]);
       cell[0]++;
-      if (row['is_available'] == true) cell[1]++;
+      if (row['available'] == true) cell[1]++;
     }
 
     return [
