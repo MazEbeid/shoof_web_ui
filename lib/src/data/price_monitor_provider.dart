@@ -166,9 +166,14 @@ class PriceTrendChartData {
   final List<String> dateLabels;
   final List<PriceTrendSeries> series;
 
+  /// Set when the provider changed granularity (or has too little history)
+  /// so the widget can explain what is being shown.
+  final String? granularityNote;
+
   const PriceTrendChartData({
     this.dateLabels = const [],
     this.series = const [],
+    this.granularityNote,
   });
 
   bool get isEmpty => series.isEmpty || dateLabels.isEmpty;
@@ -356,7 +361,9 @@ final rawPriceObservationsProvider =
         .eq('mission_id', params.missionId)
         .gt('price', 0);
 
-    // Only constrain dates when the user picks a range, or for the Today widget.
+    // Explicit user range wins; otherwise the mode window bounds the fetch
+    // (today = today, WoW = 56 days, MoM = 180 days) so we never pull the
+    // whole mission history.
     if (hasExplicitDateRange) {
       query = query
           .gte(
@@ -367,7 +374,7 @@ final rawPriceObservationsProvider =
             'observed_date',
             _formatDate(params.endDate ?? _todayDate()),
           );
-    } else if (params.timeMode == PriceTimeMode.today) {
+    } else {
       query = query
           .gte('observed_date', modeStart)
           .lte('observed_date', modeEnd);
@@ -447,6 +454,27 @@ final priceTrendProvider =
       await ref.watch(rawPriceObservationsProvider(baseParams).future);
   if (observations.isEmpty) return const PriceTrendChartData();
 
+  // Granularity fallback: MoM with less than 2 months of history collapses
+  // every series to a single dot - drop to daily buckets and say so.
+  var effectiveMode = params.timeMode;
+  String? granularityNote;
+  if (effectiveMode == PriceTimeMode.mom) {
+    final monthBuckets = observations
+        .map((o) => _bucketKey(o.observedDate, PriceTimeMode.mom))
+        .toSet();
+    if (monthBuckets.length < 2) {
+      effectiveMode = PriceTimeMode.wow; // buckets by day
+      granularityNote =
+          'Not enough monthly history for month-over-month - showing daily prices';
+    }
+  }
+  if (effectiveMode != PriceTimeMode.today && granularityNote == null) {
+    final dayBuckets = observations.map((o) => o.observedDate).toSet();
+    if (dayBuckets.length < 2) {
+      granularityNote = 'Only one day of price data so far';
+    }
+  }
+
   final sortedSkuKeys = params.skuKeys.toList()..sort();
   final perSkuBuckets = <String, List<PriceTrendPoint>>{};
 
@@ -455,7 +483,7 @@ final priceTrendProvider =
         observations.where((o) => o.skuKey == skuKey).toList();
     if (skuObs.isEmpty) continue;
 
-    if (params.timeMode == PriceTimeMode.today) {
+    if (effectiveMode == PriceTimeMode.today) {
       final prices = skuObs.map((o) => o.price).toList();
       perSkuBuckets[skuKey] = [
         PriceTrendPoint(
@@ -465,7 +493,7 @@ final priceTrendProvider =
         ),
       ];
     } else {
-      perSkuBuckets[skuKey] = _bucketObservations(skuObs, params.timeMode);
+      perSkuBuckets[skuKey] = _bucketObservations(skuObs, effectiveMode);
     }
   }
 
@@ -500,7 +528,11 @@ final priceTrendProvider =
     colorIndex++;
   }
 
-  return PriceTrendChartData(dateLabels: dateLabels, series: series);
+  return PriceTrendChartData(
+    dateLabels: dateLabels,
+    series: series,
+    granularityNote: granularityNote,
+  );
 });
 
 class PriceSkuSummary {
@@ -793,41 +825,53 @@ final priceMoversProvider =
       await ref.watch(rawPriceObservationsProvider(baseParams).future);
   if (observations.isEmpty) return [];
 
-  // sku -> bucket -> prices
-  final perSku = <String, Map<String, List<double>>>{};
-  for (final obs in observations) {
-    final bucket = mode == PriceTimeMode.mom
-        ? _bucketKey(obs.observedDate, PriceTimeMode.mom)
-        : _weekBucketKey(obs.observedDate);
-    perSku
-        .putIfAbsent(obs.skuKey, () => {})
-        .putIfAbsent(bucket, () => [])
-        .add(obs.price);
+  List<PriceMoverRow> computeMovers(String Function(String date) bucketOf) {
+    // sku -> bucket -> prices
+    final perSku = <String, Map<String, List<double>>>{};
+    for (final obs in observations) {
+      perSku
+          .putIfAbsent(obs.skuKey, () => {})
+          .putIfAbsent(bucketOf(obs.observedDate), () => [])
+          .add(obs.price);
+    }
+
+    final movers = <PriceMoverRow>[];
+    perSku.forEach((skuKey, buckets) {
+      if (buckets.length < 2) return;
+      final keys = buckets.keys.toList()..sort();
+      final previousKey = keys[keys.length - 2];
+      final currentKey = keys.last;
+      final previousPrices = buckets[previousKey]!;
+      final currentPrices = buckets[currentKey]!;
+      movers.add(PriceMoverRow(
+        skuKey: skuKey,
+        skuLabel: priceSkuLabel(skuKey),
+        previousLabel: previousKey,
+        currentLabel: currentKey,
+        previousAvg:
+            previousPrices.reduce((a, b) => a + b) / previousPrices.length,
+        currentAvg:
+            currentPrices.reduce((a, b) => a + b) / currentPrices.length,
+        observationCount: previousPrices.length + currentPrices.length,
+      ));
+    });
+
+    movers.sort(
+        (a, b) => b.changePercent.abs().compareTo(a.changePercent.abs()));
+    return movers.take(10).toList();
   }
 
-  final movers = <PriceMoverRow>[];
-  perSku.forEach((skuKey, buckets) {
-    if (buckets.length < 2) return;
-    final keys = buckets.keys.toList()..sort();
-    final previousKey = keys[keys.length - 2];
-    final currentKey = keys.last;
-    final previousPrices = buckets[previousKey]!;
-    final currentPrices = buckets[currentKey]!;
-    movers.add(PriceMoverRow(
-      skuKey: skuKey,
-      skuLabel: priceSkuLabel(skuKey),
-      previousLabel: previousKey,
-      currentLabel: currentKey,
-      previousAvg:
-          previousPrices.reduce((a, b) => a + b) / previousPrices.length,
-      currentAvg: currentPrices.reduce((a, b) => a + b) / currentPrices.length,
-      observationCount: previousPrices.length + currentPrices.length,
-    ));
-  });
+  var movers = computeMovers(mode == PriceTimeMode.mom
+      ? (date) => _bucketKey(date, PriceTimeMode.mom)
+      : _weekBucketKey);
 
-  movers.sort(
-      (a, b) => b.changePercent.abs().compareTo(a.changePercent.abs()));
-  return movers.take(10).toList();
+  // MoM with a single month of history has no movers by definition -
+  // fall back to week-over-week so the widget still says something useful.
+  if (movers.isEmpty && mode == PriceTimeMode.mom) {
+    movers = computeMovers(_weekBucketKey);
+  }
+
+  return movers;
 });
 
 // =============================================================================

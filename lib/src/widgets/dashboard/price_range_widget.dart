@@ -53,7 +53,10 @@ class PriceRangeWidget extends HookConsumerWidget {
 
     return PriceWidgetShell(
       title: title,
-      subtitle: subtitle,
+      subtitle: subtitle ??
+          'Cheapest to most expensive shelf price observed per SKU; the bar '
+          'spans min to max, the solid tick is the average, the outlined '
+          'tick is your anchor price',
       trailing: PriceSkuSelectButton(
         selectedCount: selectedSkuKeys.value.length,
         selectedLabels: selectedLabels,

@@ -149,6 +149,15 @@ class PriceTrendWidget extends HookConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     PriceTrendLegend(series: chart.series),
+                    if (chart.granularityNote != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        chart.granularityNote!,
+                        style: AdminTextStyles.labelSmall.copyWith(
+                          color: AdminColors.warning,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: AdminSpacing.sm),
                     Expanded(child: _PriceTrendChart(chart: chart)),
                   ],
