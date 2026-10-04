@@ -1,9 +1,9 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import 'widget_filters_row.dart';
+import 'export_button.dart';
+import 'sku_filter_bar.dart';
 import '../admin_stat_card.dart';
 import '../../data/cities_constants.dart';
 import '../../data/region_colors.dart';
@@ -32,24 +32,10 @@ class MissionOverviewWidget extends HookConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // Local filter state
-    final selectedCity = useState<String?>(null);
-    final selectedChannel = useState<String?>(null);
-    final startDate = useState<DateTime?>(null);
-    final endDate = useState<DateTime?>(null);
-
-    final hasFilters = selectedCity.value != null ||
-        selectedChannel.value != null ||
-        startDate.value != null ||
-        endDate.value != null;
+    final filters = useSkuFilters();
 
     // Build filter params
-    final filterParams = WidgetFilterParams(
-      missionId: missionId,
-      city: selectedCity.value,
-      channel: selectedChannel.value,
-      startDate: startDate.value,
-      endDate: endDate.value,
-    );
+    final filterParams = filters.params(missionId);
 
     // Watch data with filter params
     final overviewAsync = ref.watch(missionOverviewForWidgetProvider(filterParams));
@@ -82,31 +68,47 @@ class MissionOverviewWidget extends HookConsumerWidget {
               Icon(Icons.dashboard, color: AdminColors.primary, size: 24),
               const SizedBox(width: AdminSpacing.sm),
               Text(title, style: AdminTextStyles.sectionTitle),
+              const Spacer(),
+              ExportButton(
+                baseName: 'mission_overview',
+                buildData: () async {
+                  final overview = await ref.read(
+                      missionOverviewForWidgetProvider(filterParams).future);
+                  final cities = await ref.read(
+                      cityBreakdownForWidgetProvider(filterParams).future);
+                  final channels = await ref.read(
+                      channelBreakdownForWidgetProvider(filterParams).future);
+                  final regionTotals = <String, double>{};
+                  for (final c in cities) {
+                    regionTotals.update(
+                        regionForCity(c.label), (v) => v + c.value,
+                        ifAbsent: () => c.value);
+                  }
+                  return CsvExportData(
+                    header: const ['Dimension', 'Label', 'Visits'],
+                    rows: [
+                      ['Total', 'All visits', overview?.totalSubmissions ?? 0],
+                      ...regionTotals.entries
+                          .map((e) => ['Region', e.key, e.value.toInt()]),
+                      ...cities
+                          .map((c) => ['City', c.label, c.value.toInt()]),
+                      ...channels
+                          .map((c) => ['Channel', c.label, c.value.toInt()]),
+                    ],
+                  );
+                },
+              ),
             ],
           ),
 
           const SizedBox(height: AdminSpacing.md),
 
-          // Filters row
-          WidgetFiltersRow(
+          // Filters row (region-level: overview data is regional by design)
+          SkuFilterBar(
             missionId: missionId,
-            selectedCity: selectedCity.value,
-            selectedChannel: selectedChannel.value,
-            startDate: startDate.value,
-            endDate: endDate.value,
-            hasFilters: hasFilters,
-            onCityChanged: (city) => selectedCity.value = city,
-            onChannelChanged: (channel) => selectedChannel.value = channel,
-            onDateRangeChanged: (range) {
-              startDate.value = range?.start;
-              endDate.value = range?.end;
-            },
-            onClearAll: () {
-              selectedCity.value = null;
-              selectedChannel.value = null;
-              startDate.value = null;
-              endDate.value = null;
-            },
+            filters: filters,
+            showSkuDims: false,
+            regionInsteadOfCity: true,
           ),
 
           const SizedBox(height: AdminSpacing.xl),

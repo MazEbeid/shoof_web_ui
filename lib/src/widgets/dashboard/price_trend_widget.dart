@@ -7,6 +7,7 @@ import 'price_observations_dialog.dart';
 import 'price_sku_picker.dart';
 import 'price_sku_summary_cards.dart';
 import '../../data/anchor_prices_provider.dart';
+import 'export_button.dart';
 import '../../data/price_monitor_provider.dart';
 import '../../theme/admin_colors.dart';
 import '../../theme/admin_spacing.dart';
@@ -65,7 +66,34 @@ class PriceTrendWidget extends HookConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: AdminTextStyles.sectionTitle),
+          Row(
+            children: [
+              Expanded(
+                child: Text(title, style: AdminTextStyles.sectionTitle),
+              ),
+              ExportButton(
+                baseName: 'price_trend',
+                buildData: () async {
+                  final chart =
+                      await ref.read(priceTrendProvider(filterParams).future);
+                  return CsvExportData(
+                    header: const ['Date', 'SKU', 'Avg Price', 'Observations'],
+                    rows: [
+                      for (final series in chart.series)
+                        for (final point in series.points)
+                          if (point.avgPrice != null)
+                            <Object?>[
+                              point.label,
+                              series.skuLabel,
+                              point.avgPrice!.toStringAsFixed(2),
+                              point.count,
+                            ],
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
           if (subtitle != null && subtitle!.isNotEmpty) ...[
             const SizedBox(height: AdminSpacing.xs),
             Text(

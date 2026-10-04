@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import '../../data/anchor_prices_provider.dart';
+import 'export_button.dart';
 import '../../data/price_monitor_provider.dart';
 import '../../theme/admin_colors.dart';
 import '../../theme/admin_spacing.dart';
@@ -58,12 +59,45 @@ class PriceVsAnchorWidget extends ConsumerWidget {
           Row(
             children: [
               Expanded(child: Text(title, style: AdminTextStyles.sectionTitle)),
-              if (!readOnly)
+              ExportButton(
+                baseName: 'price_vs_anchor',
+                buildData: () async {
+                  final anchorState = ref
+                      .read(anchorPricesProvider(AnchorPricesParams(
+                          clientId: clientId, missionId: missionId)))
+                      .value;
+                  final rows = await ref.read(priceVsAnchorProvider(
+                    PriceVsAnchorParams(
+                      filters: filterParams,
+                      anchorPrices:
+                          anchorState?.prices ?? const <String, double>{},
+                    ),
+                  ).future);
+                  return CsvExportData(
+                    header: const [
+                      'Product', 'City', 'Channel', 'Observed Avg',
+                      'Anchor Price', 'Deviation %', 'Observations',
+                    ],
+                    rows: rows
+                        .map((r) => <Object?>[
+                              r.productName, r.city, r.channel,
+                              r.observedAvg.toStringAsFixed(2),
+                              r.anchorPrice?.toStringAsFixed(2),
+                              r.deviationPercent?.toStringAsFixed(1),
+                              r.observationCount,
+                            ])
+                        .toList(),
+                  );
+                },
+              ),
+              if (!readOnly) ...[
+                const SizedBox(width: AdminSpacing.sm),
                 TextButton.icon(
                   onPressed: () => _showAnchorEditor(context, ref),
                   icon: const Icon(Icons.edit_outlined, size: 16),
                   label: const Text('Edit Anchors'),
                 ),
+              ],
             ],
           ),
           if (subtitle != null && subtitle!.isNotEmpty) ...[
@@ -198,18 +232,33 @@ class PriceVsAnchorWidget extends ConsumerWidget {
     );
   }
 
-  Future<void> _showAnchorEditor(BuildContext context, WidgetRef ref) async {
-    final skus = await ref.read(priceSkusForMissionProvider(missionId).future);
-    final anchorNotifier = ref.read(anchorPricesProvider(
-      AnchorPricesParams(clientId: clientId, missionId: missionId),
-    ).notifier);
-    final current = ref.read(anchorPricesProvider(
-      AnchorPricesParams(clientId: clientId, missionId: missionId),
-    )).value?.prices ?? {};
+  Future<void> _showAnchorEditor(BuildContext context, WidgetRef ref) =>
+      showAnchorEditorDialog(context, ref,
+          missionId: missionId, clientId: clientId);
+}
 
-    if (!context.mounted) return;
+/// Anchor price editor — shared by Price vs Anchor and Price Monitor.
+Future<void> showAnchorEditorDialog(
+  BuildContext context,
+  WidgetRef ref, {
+  required String missionId,
+  required String clientId,
+}) async {
+  final skus = await ref.read(priceSkusForMissionProvider(missionId).future);
+  final anchorNotifier = ref.read(anchorPricesProvider(
+    AnchorPricesParams(clientId: clientId, missionId: missionId),
+  ).notifier);
+  final current = ref
+          .read(anchorPricesProvider(
+            AnchorPricesParams(clientId: clientId, missionId: missionId),
+          ))
+          .value
+          ?.prices ??
+      {};
 
-    await showDialog(
+  if (!context.mounted) return;
+
+  await showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Anchor Prices'),
@@ -258,15 +307,14 @@ class PriceVsAnchorWidget extends ConsumerWidget {
             },
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Close'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _TableHeader extends StatelessWidget {

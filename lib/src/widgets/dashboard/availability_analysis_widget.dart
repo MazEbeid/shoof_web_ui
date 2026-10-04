@@ -4,12 +4,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
-import 'widget_filters_row.dart';
+import 'availability_vs_price_widget.dart';
+import 'export_button.dart';
+import 'sku_filter_bar.dart';
+import '../../data/price_monitor_provider.dart';
 import '../../data/widget_data_providers.dart';
 import '../../theme/admin_colors.dart';
 import '../../theme/admin_spacing.dart';
 import '../../theme/admin_radius.dart';
 import '../../theme/admin_typography.dart';
+
+/// The three lenses of [AvailabilityAnalysisWidget].
+enum AvailabilityAnalysisView { bySku, skuChannel, availabilityPrice }
+
+/// CSV rows for a per-SKU availability list (analysis "By SKU" view and the
+/// admin SKU availability grid).
+CsvExportData skuAvailabilityCsv(List<SkuAvailability> skus) => CsvExportData(
+      header: const [
+        'SKU', 'Brand', 'Company', 'Package', 'Size',
+        'Stores Checked', 'Stores Stocking', 'Availability %',
+      ],
+      rows: skus
+          .map((s) => <Object?>[
+                s.skuEnglish, s.brand, s.company, s.package, s.size,
+                s.totalChecks, s.availableCount,
+                s.availabilityRate.toStringAsFixed(1),
+              ])
+          .toList(),
+    );
 
 /// Availability Analysis Widget
 ///
@@ -17,9 +39,10 @@ import '../../theme/admin_typography.dart';
 /// once and its most recent visit decides the state, no matter how many
 /// times it was visited.
 ///
-/// Two views:
+/// Three views:
 /// - "By SKU": per-SKU store availability ranking (worst first)
 /// - "SKU x Channel": heatmap matrix of store availability % per channel
+/// - "Availability x Price": availability % joined with avg observed price
 ///
 /// Self-contained with local filter state (city/channel/date + company/
 /// brand/package/size). Self-sizing: long lists expand the widget so the
@@ -29,6 +52,7 @@ class AvailabilityAnalysisWidget extends HookConsumerWidget {
   final String title;
   final String? subtitle;
   final String? subtitleAr;
+  final AvailabilityAnalysisView initialView;
 
   const AvailabilityAnalysisWidget({
     super.key,
@@ -36,37 +60,19 @@ class AvailabilityAnalysisWidget extends HookConsumerWidget {
     this.title = 'SKU Availability',
     this.subtitle,
     this.subtitleAr,
+    this.initialView = AvailabilityAnalysisView.bySku,
   });
 
   static const int _previewRowCount = 8;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final showHeatmap = useState(false);
+    final view = useState(initialView);
     final showAll = useState(false);
 
     // Local filter state
-    final selectedCity = useState<String?>(null);
-    final selectedChannel = useState<String?>(null);
-    final selectedCompany = useState<String?>(null);
-    final selectedBrand = useState<String?>(null);
-    final selectedPackage = useState<String?>(null);
-    final selectedSize = useState<String?>(null);
-    final startDate = useState<DateTime?>(null);
-    final endDate = useState<DateTime?>(null);
-
-    // Build filter params from local state
-    final filterParams = WidgetFilterParams(
-      missionId: missionId,
-      city: selectedCity.value,
-      channel: selectedChannel.value,
-      company: selectedCompany.value,
-      brand: selectedBrand.value,
-      package: selectedPackage.value,
-      size: selectedSize.value,
-      startDate: startDate.value,
-      endDate: endDate.value,
-    );
+    final filters = useSkuFilters();
+    final filterParams = filters.params(missionId);
 
     final allSkus = ref.watch(skuAvailabilityForWidgetProvider(filterParams));
 
@@ -90,9 +96,58 @@ class AvailabilityAnalysisWidget extends HookConsumerWidget {
               Text(title, style: AdminTextStyles.sectionTitle),
               const Spacer(),
               _ViewToggle(
-                showHeatmap: showHeatmap.value,
-                onListTap: () => showHeatmap.value = false,
-                onHeatmapTap: () => showHeatmap.value = true,
+                view: view.value,
+                onChanged: (v) => view.value = v,
+              ),
+              const SizedBox(width: AdminSpacing.md),
+              ExportButton(
+                baseName: switch (view.value) {
+                  AvailabilityAnalysisView.bySku => 'availability_by_sku',
+                  AvailabilityAnalysisView.skuChannel =>
+                    'availability_by_sku_channel',
+                  AvailabilityAnalysisView.availabilityPrice =>
+                    'availability_vs_price',
+                },
+                buildData: () async => switch (view.value) {
+                  AvailabilityAnalysisView.bySku => skuAvailabilityCsv(
+                      await ref.read(
+                          skuAvailabilityForWidgetProvider(filterParams)
+                              .future)),
+                  AvailabilityAnalysisView.skuChannel => CsvExportData(
+                      header: const [
+                        'SKU', 'Channel', 'Stores Checked',
+                        'Stores Stocking', 'Availability %',
+                      ],
+                      rows: (await ref.read(
+                              skuChannelAvailabilityForWidgetProvider(
+                                      filterParams)
+                                  .future))
+                          .map((c) => <Object?>[
+                                c.skuEnglish, c.channel, c.totalChecks,
+                                c.availableCount,
+                                c.availabilityRate.toStringAsFixed(1),
+                              ])
+                          .toList(),
+                    ),
+                  AvailabilityAnalysisView.availabilityPrice => CsvExportData(
+                      header: const [
+                        'SKU', 'Availability %', 'Avg Price (EGP)',
+                        'Stores', 'Price Observations', 'Flagged',
+                      ],
+                      rows: (await ref.read(availabilityVsPriceProvider(
+                              AvailabilityPriceListView.priceParams(
+                                  filterParams))
+                          .future))
+                          .map((r) => <Object?>[
+                                r.skuLabel,
+                                r.availabilityRate.toStringAsFixed(1),
+                                r.avgPrice?.toStringAsFixed(2),
+                                r.totalChecks, r.observationCount,
+                                r.flagged ? 'YES' : '',
+                              ])
+                          .toList(),
+                    ),
+                },
               ),
               const SizedBox(width: AdminSpacing.md),
               // SKU count badge
@@ -119,10 +174,16 @@ class AvailabilityAnalysisWidget extends HookConsumerWidget {
           ),
           const SizedBox(height: AdminSpacing.sm),
           Text(
-            showHeatmap.value
-                ? '% of stores currently stocking the SKU, per channel '
-                    '(latest visit per store)'
-                : 'Per-SKU availability across stores (latest visit per store)',
+            switch (view.value) {
+              AvailabilityAnalysisView.bySku =>
+                'Per-SKU availability across stores (latest visit per store)',
+              AvailabilityAnalysisView.skuChannel =>
+                '% of stores currently stocking the SKU, per channel '
+                    '(latest visit per store)',
+              AvailabilityAnalysisView.availabilityPrice =>
+                'Availability % vs average observed price — flags SKUs both '
+                    'scarce and priced above the median',
+            },
             style: AdminTextStyles.bodySmall.copyWith(
               color: AdminColors.textMuted,
             ),
@@ -130,53 +191,29 @@ class AvailabilityAnalysisWidget extends HookConsumerWidget {
           const SizedBox(height: AdminSpacing.md),
 
           // Filters row
-          WidgetFiltersRow(
-            missionId: missionId,
-            selectedCity: selectedCity.value,
-            selectedChannel: selectedChannel.value,
-            selectedCompany: selectedCompany.value,
-            selectedBrand: selectedBrand.value,
-            selectedPackage: selectedPackage.value,
-            selectedSize: selectedSize.value,
-            startDate: startDate.value,
-            endDate: endDate.value,
-            hasFilters: filterParams.hasFilters,
-            onCityChanged: (city) => selectedCity.value = city,
-            onChannelChanged: (channel) => selectedChannel.value = channel,
-            onCompanyChanged: (company) => selectedCompany.value = company,
-            onBrandChanged: (brand) => selectedBrand.value = brand,
-            onPackageChanged: (package) => selectedPackage.value = package,
-            onSizeChanged: (size) => selectedSize.value = size,
-            onDateRangeChanged: (range) {
-              startDate.value = range?.start;
-              endDate.value = range?.end;
-            },
-            onClearAll: () {
-              selectedCity.value = null;
-              selectedChannel.value = null;
-              selectedCompany.value = null;
-              selectedBrand.value = null;
-              selectedPackage.value = null;
-              selectedSize.value = null;
-              startDate.value = null;
-              endDate.value = null;
-            },
-          ),
+          SkuFilterBar(missionId: missionId, filters: filters),
           const SizedBox(height: AdminSpacing.md),
 
           // Body
-          if (showHeatmap.value)
-            _SkuChannelHeatmap(
-              filterParams: filterParams,
-              showAll: showAll.value,
-              onToggleShowAll: () => showAll.value = !showAll.value,
-            )
-          else
-            _SkuRankedList(
-              allSkus: allSkus,
-              showAll: showAll.value,
-              onToggleShowAll: () => showAll.value = !showAll.value,
-            ),
+          switch (view.value) {
+            AvailabilityAnalysisView.skuChannel => _SkuChannelHeatmap(
+                filterParams: filterParams,
+                showAll: showAll.value,
+                onToggleShowAll: () => showAll.value = !showAll.value,
+              ),
+            AvailabilityAnalysisView.availabilityPrice =>
+              AvailabilityPriceListView(
+                params: filterParams,
+                showAll: showAll.value,
+                onToggleShowAll: () => showAll.value = !showAll.value,
+                previewRowCount: _previewRowCount,
+              ),
+            AvailabilityAnalysisView.bySku => _SkuRankedList(
+                allSkus: allSkus,
+                showAll: showAll.value,
+                onToggleShowAll: () => showAll.value = !showAll.value,
+              ),
+          },
 
           // Subtitle
           if (subtitle != null && subtitle!.isNotEmpty) ...[
@@ -227,14 +264,12 @@ class _ShowAllToggle extends StatelessWidget {
 }
 
 class _ViewToggle extends StatelessWidget {
-  final bool showHeatmap;
-  final VoidCallback onListTap;
-  final VoidCallback onHeatmapTap;
+  final AvailabilityAnalysisView view;
+  final ValueChanged<AvailabilityAnalysisView> onChanged;
 
   const _ViewToggle({
-    required this.showHeatmap,
-    required this.onListTap,
-    required this.onHeatmapTap,
+    required this.view,
+    required this.onChanged,
   });
 
   @override
@@ -250,14 +285,21 @@ class _ViewToggle extends StatelessWidget {
           _ToggleButton(
             icon: Icons.format_list_numbered,
             label: 'By SKU',
-            isSelected: !showHeatmap,
-            onTap: onListTap,
+            isSelected: view == AvailabilityAnalysisView.bySku,
+            onTap: () => onChanged(AvailabilityAnalysisView.bySku),
           ),
           _ToggleButton(
             icon: Icons.grid_on,
             label: 'SKU × Channel',
-            isSelected: showHeatmap,
-            onTap: onHeatmapTap,
+            isSelected: view == AvailabilityAnalysisView.skuChannel,
+            onTap: () => onChanged(AvailabilityAnalysisView.skuChannel),
+          ),
+          _ToggleButton(
+            icon: Icons.price_check,
+            label: 'Availability × Price',
+            isSelected: view == AvailabilityAnalysisView.availabilityPrice,
+            onTap: () =>
+                onChanged(AvailabilityAnalysisView.availabilityPrice),
           ),
         ],
       ),

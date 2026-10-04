@@ -1,0 +1,3 @@
+
+# client data exports never belong in git
+*.xlsx

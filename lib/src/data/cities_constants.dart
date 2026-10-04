@@ -284,3 +284,24 @@ const Map<String, List<String>> REGIONS = {
     "bahrElAhmar"
   ],
 };
+
+/// Bucket label for DB city values that don't match any CITIES entry —
+/// mirrors the "Unknown region" slice in the Mission Overview region pie.
+const String kUnknownRegion = 'Unknown region';
+
+/// Region display name for a DB city value (null-safe; [kUnknownRegion]
+/// when the city can't be mapped).
+String regionForCity(String? city) =>
+    (cityInfoFor(city)?['region'] as String?) ?? kUnknownRegion;
+
+/// Distinct region display names present in [cities] (DB city values),
+/// in a stable order; [kUnknownRegion] sorts last when present.
+List<String> regionsForCities(List<String> cities) {
+  final regions = cities.map(regionForCity).toSet().toList()..sort();
+  if (regions.remove(kUnknownRegion)) regions.add(kUnknownRegion);
+  return regions;
+}
+
+/// The subset of [cities] (DB city values) belonging to [region].
+List<String> citiesForRegion(String region, List<String> cities) =>
+    cities.where((c) => regionForCity(c) == region).toList();

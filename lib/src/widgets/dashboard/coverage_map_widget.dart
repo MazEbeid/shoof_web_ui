@@ -6,13 +6,14 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'package:latlong2/latlong.dart';
-import 'widget_filters_row.dart';
+import 'export_button.dart';
+import 'sku_filter_bar.dart';
+import '../../data/cities_constants.dart';
 import '../../data/widget_data_providers.dart';
 import '../../theme/admin_colors.dart';
 import '../../theme/admin_spacing.dart';
 import '../../theme/admin_radius.dart';
 import '../../theme/admin_typography.dart';
-import '../../data/cities_constants.dart';
 
 /// Coverage Map Widget - per-city visit bubbles on an OpenStreetMap base.
 ///
@@ -38,23 +39,8 @@ class CoverageMapWidget extends HookConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final mapController = useMemoized(MapController.new);
 
-    final selectedCity = useState<String?>(null);
-    final selectedChannel = useState<String?>(null);
-    final startDate = useState<DateTime?>(null);
-    final endDate = useState<DateTime?>(null);
-
-    final hasFilters = selectedCity.value != null ||
-        selectedChannel.value != null ||
-        startDate.value != null ||
-        endDate.value != null;
-
-    final filterParams = WidgetFilterParams(
-      missionId: missionId,
-      city: selectedCity.value,
-      channel: selectedChannel.value,
-      startDate: startDate.value,
-      endDate: endDate.value,
-    );
+    final filters = useSkuFilters();
+    final filterParams = filters.params(missionId);
 
     final citiesAsync = ref.watch(cityBreakdownForWidgetProvider(filterParams));
     final overviewAsync = ref.watch(missionOverviewForWidgetProvider(filterParams));
@@ -76,6 +62,24 @@ class CoverageMapWidget extends HookConsumerWidget {
               const SizedBox(width: AdminSpacing.sm),
               Text(title, style: AdminTextStyles.sectionTitle),
               const Spacer(),
+              ExportButton(
+                baseName: 'coverage_by_city',
+                buildData: () async {
+                  final cities = await ref.read(
+                      cityBreakdownForWidgetProvider(filterParams).future);
+                  return CsvExportData(
+                    header: const ['City', 'Region', 'Visits'],
+                    rows: cities
+                        .map((c) => <Object?>[
+                              c.label,
+                              regionForCity(c.label),
+                              c.value.toInt(),
+                            ])
+                        .toList(),
+                  );
+                },
+              ),
+              const SizedBox(width: AdminSpacing.sm),
               // Total visits badge - same number the Mission Overview shows.
               overviewAsync.when(
                 data: (overview) => overview == null
@@ -100,25 +104,10 @@ class CoverageMapWidget extends HookConsumerWidget {
             ],
           ),
           const SizedBox(height: AdminSpacing.md),
-          WidgetFiltersRow(
+          SkuFilterBar(
             missionId: missionId,
-            selectedCity: selectedCity.value,
-            selectedChannel: selectedChannel.value,
-            startDate: startDate.value,
-            endDate: endDate.value,
-            hasFilters: hasFilters,
-            onCityChanged: (v) => selectedCity.value = v,
-            onChannelChanged: (v) => selectedChannel.value = v,
-            onDateRangeChanged: (range) {
-              startDate.value = range?.start;
-              endDate.value = range?.end;
-            },
-            onClearAll: () {
-              selectedCity.value = null;
-              selectedChannel.value = null;
-              startDate.value = null;
-              endDate.value = null;
-            },
+            filters: filters,
+            showSkuDims: false,
           ),
           const SizedBox(height: AdminSpacing.md),
           Expanded(

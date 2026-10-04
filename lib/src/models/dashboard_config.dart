@@ -22,9 +22,11 @@ enum WidgetType {
   priceVsAnchor, // Observed price vs anchor deviation table
   priceToday, // Today's price observations snapshot
   priceComparison, // Avg price per city or channel bar chart
-  priceRange, // Min–avg–max spread per SKU with anchor overlay
-  priceMovers, // Biggest WoW/MoM price changes per SKU
+  priceRange, // RETIRED: renders priceMonitor (kept so saved dashboards load)
+  priceMovers, // RETIRED: renders priceMonitor (kept so saved dashboards load)
+  priceMonitor, // Analyst table: modal latest price, Δ vs 4-wk, spread, spark
   availabilityVsPrice, // Availability % vs avg price per SKU
+  rawData, // Every accepted visit: SKU matrix, photos, recording, export
   counter,
   pie,
   bar,
@@ -74,8 +76,12 @@ extension WidgetTypeExtension on WidgetType {
         return 'price_range';
       case WidgetType.priceMovers:
         return 'price_movers';
+      case WidgetType.priceMonitor:
+        return 'price_monitor';
       case WidgetType.availabilityVsPrice:
         return 'availability_vs_price';
+      case WidgetType.rawData:
+        return 'raw_data';
     }
   }
 
@@ -119,8 +125,12 @@ extension WidgetTypeExtension on WidgetType {
         return 'Price Range';
       case WidgetType.priceMovers:
         return 'Price Movers';
+      case WidgetType.priceMonitor:
+        return 'Price Monitor';
       case WidgetType.availabilityVsPrice:
         return 'Availability vs Price';
+      case WidgetType.rawData:
+        return 'Raw Data';
     }
   }
 
@@ -164,8 +174,12 @@ extension WidgetTypeExtension on WidgetType {
         return 'linear_scale';
       case WidgetType.priceMovers:
         return 'swap_vert';
+      case WidgetType.priceMonitor:
+        return 'query_stats';
       case WidgetType.availabilityVsPrice:
         return 'price_check';
+      case WidgetType.rawData:
+        return 'table_rows';
     }
   }
 
@@ -209,8 +223,14 @@ extension WidgetTypeExtension on WidgetType {
         return 'Min–avg–max price spread per SKU with anchor price overlay';
       case WidgetType.priceMovers:
         return 'SKUs with the biggest week/month price changes';
+      case WidgetType.priceMonitor:
+        return 'Street price this week vs 4-week average, spread, trend '
+            'and anchor compliance per SKU';
       case WidgetType.availabilityVsPrice:
         return 'Flags SKUs that are both expensive and hard to find';
+      case WidgetType.rawData:
+        return 'Every accepted visit: location, per-SKU availability & '
+            'prices, photos, recording — filterable and exportable';
     }
   }
 
@@ -1301,6 +1321,32 @@ class WidgetConfig {
         display: const DisplayConfig(
           color: '#6A1B9A',
           subtitle: 'Biggest price changes week over week',
+        ),
+      );
+
+  factory WidgetConfig.defaultPriceMonitor() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'price_monitor',
+        title: 'Price Monitor',
+        titleAr: 'مراقبة الأسعار',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 3),
+        dataSource: const DataSourceConfig(view: 'v_price_observations'),
+        display: const DisplayConfig(
+          color: '#9C27B0',
+          subtitle: 'Street price this week vs 4-week average',
+        ),
+      );
+
+  factory WidgetConfig.defaultRawData() => WidgetConfig(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        type: 'raw_data',
+        title: 'Raw Data',
+        titleAr: 'البيانات الخام',
+        position: const WidgetPosition(x: 0, y: 0, w: 12, h: 4),
+        dataSource: const DataSourceConfig(view: 'submission_answers'),
+        display: const DisplayConfig(
+          color: '#455A64',
+          subtitle: 'Every accepted visit with SKU matrix, photos & recording',
         ),
       );
 

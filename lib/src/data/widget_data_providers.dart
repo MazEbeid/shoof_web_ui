@@ -12,6 +12,11 @@ class WidgetFilterParams {
   final String? package;
   final String? size;
   final String? city;
+
+  /// Region display name (see cities_constants.dart). Resolved to the
+  /// mission's DB city values at query time — only the mission-overview
+  /// providers honor it currently.
+  final String? region;
   final String? channel;
   final DateTime? startDate;
   final DateTime? endDate;
@@ -23,6 +28,7 @@ class WidgetFilterParams {
     this.package,
     this.size,
     this.city,
+    this.region,
     this.channel,
     this.startDate,
     this.endDate,
@@ -35,6 +41,7 @@ class WidgetFilterParams {
       package != null ||
       size != null ||
       city != null ||
+      region != null ||
       channel != null ||
       startDate != null ||
       endDate != null;
@@ -49,101 +56,15 @@ class WidgetFilterParams {
           package == other.package &&
           size == other.size &&
           city == other.city &&
+          region == other.region &&
           channel == other.channel &&
           startDate == other.startDate &&
           endDate == other.endDate;
 
   @override
   int get hashCode => Object.hash(missionId, company, brand, package, size,
-      city, channel, startDate, endDate);
+      city, region, channel, startDate, endDate);
 }
-
-/// Location data point for the coverage map (one per accepted visit).
-class LocationPoint {
-  final String submissionId;
-  final double lat;
-  final double lng;
-  final String? city;
-  final String? district;
-  final String? placeType;
-  final String? locationName;
-
-  LocationPoint({
-    required this.submissionId,
-    required this.lat,
-    required this.lng,
-    this.city,
-    this.district,
-    this.placeType,
-    this.locationName,
-  });
-}
-
-/// Map locations for a mission with widget-local filters.
-/// Deduplicated by submission_id, so each point is one accepted visit.
-final mapLocationsForWidgetProvider =
-    FutureProvider.family<List<LocationPoint>, WidgetFilterParams>(
-        (ref, params) async {
-  final supabase = ref.watch(sharedSupabaseProvider);
-
-  try {
-    var query = supabase
-        .from('submission_answers')
-        .select(
-            'submission_id, lat, lng, city, district_name, channel, location_name')
-        .eq('mission_id', params.missionId)
-        .eq('qa_status', 'accepted')
-        .not('lat', 'is', null)
-        .not('lng', 'is', null);
-
-    if (params.city != null) {
-      query = query.eq('city', params.city!);
-    }
-    if (params.channel != null) {
-      query = query.eq('channel', params.channel!);
-    }
-    if (params.startDate != null) {
-      query = query.gte(
-          'observed_date', params.startDate!.toIso8601String().split('T')[0]);
-    }
-    if (params.endDate != null) {
-      query = query.lte(
-          'observed_date', params.endDate!.toIso8601String().split('T')[0]);
-    }
-
-    final response = await query.limit(50000);
-    final data = response as List;
-
-    final seenSubmissions = <String>{};
-    final locations = <LocationPoint>[];
-
-    for (final row in data) {
-      final submissionId = row['submission_id'] as String?;
-      if (submissionId == null || seenSubmissions.contains(submissionId)) {
-        continue;
-      }
-
-      final lat = row['lat'];
-      final lng = row['lng'];
-      if (lat == null || lng == null) continue;
-
-      seenSubmissions.add(submissionId);
-      locations.add(LocationPoint(
-        submissionId: submissionId,
-        lat: (lat as num).toDouble(),
-        lng: (lng as num).toDouble(),
-        city: row['city'] as String?,
-        district: row['district_name'] as String?,
-        placeType: row['channel'] as String?,
-        locationName: row['location_name'] as String?,
-      ));
-    }
-
-    return locations;
-  } catch (e) {
-    return [];
-  }
-});
 
 /// Cities for a mission (for filter dropdowns)
 final missionCitiesProvider =
@@ -405,6 +326,16 @@ class MissionOverviewData {
 /// No filters -> live view v_mission_overview; filtered -> RPC
 /// fn_mission_overview_filtered. Errors (e.g. statement timeouts) are
 /// rethrown so the widget shows an error state instead of silent "no data".
+/// Resolves [WidgetFilterParams.region] to the mission's DB city values
+/// (null when no region filter is active).
+Future<List<String>?> citiesForRegionFilter(
+    Ref ref, WidgetFilterParams params) async {
+  if (params.region == null) return null;
+  final cities =
+      await ref.watch(missionCitiesProvider(params.missionId).future);
+  return citiesForRegion(params.region!, cities);
+}
+
 final missionOverviewForWidgetProvider =
     FutureProvider.family<MissionOverviewData?, WidgetFilterParams>(
         (ref, params) async {
@@ -421,6 +352,7 @@ final missionOverviewForWidgetProvider =
     return MissionOverviewData.fromMap(response);
   }
 
+  final regionCities = await citiesForRegionFilter(ref, params);
   final rpcResponse =
       await supabase.rpc('fn_mission_overview_filtered', params: {
     'p_mission_id': params.missionId,
@@ -428,6 +360,7 @@ final missionOverviewForWidgetProvider =
     'p_channel': params.channel,
     'p_start_date': params.startDate?.toIso8601String().split('T')[0],
     'p_end_date': params.endDate?.toIso8601String().split('T')[0],
+    'p_cities': regionCities,
   });
 
   if (rpcResponse == null || (rpcResponse as List).isEmpty) return null;
@@ -464,46 +397,25 @@ final supabase = ref.watch(sharedSupabaseProvider);
         .toList();
   }
 
-  var query = supabase
-      .from('submission_answers')
-      .select('submission_id, city')
-      .eq('mission_id', params.missionId)
-      .eq('qa_status', 'accepted')
-      .not('city', 'is', null);
+  // Server-side aggregation: PostgREST caps responses at 1,000 rows, so
+  // client-side counting over raw answer rows silently undercounts.
+  final regionCities = await citiesForRegionFilter(ref, params);
+  final rpcResponse =
+      await supabase.rpc('fn_city_breakdown_filtered', params: {
+    'p_mission_id': params.missionId,
+    'p_city': params.city,
+    'p_cities': regionCities,
+    'p_channel': params.channel,
+    'p_start_date': params.startDate?.toIso8601String().split('T')[0],
+    'p_end_date': params.endDate?.toIso8601String().split('T')[0],
+  });
 
-  if (params.city != null) {
-    query = query.eq('city', params.city!);
-  }
-  if (params.channel != null) {
-    query = query.eq('channel', params.channel!);
-  }
-  if (params.startDate != null) {
-    query = query.gte(
-        'observed_date', params.startDate!.toIso8601String().split('T')[0]);
-  }
-  if (params.endDate != null) {
-    query = query.lte(
-        'observed_date', params.endDate!.toIso8601String().split('T')[0]);
-  }
-
-  final response = await query;
-  final data = response as List;
-
-  // Group by city and count unique submissions
-  final cityMap = <String, Set<String>>{};
-  for (final row in data) {
-    final city = row['city'] as String?;
-    final submissionId = row['submission_id'] as String?;
-    if (city != null && submissionId != null) {
-      cityMap.putIfAbsent(city, () => {}).add(submissionId);
-    }
-  }
-
-  return cityMap.entries
-      .map((e) =>
-          ChartDataPoint(label: e.key, value: e.value.length.toDouble()))
-      .toList()
-    ..sort((a, b) => b.value.compareTo(a.value));
+  return (rpcResponse as List)
+      .map((row) => ChartDataPoint(
+            label: row['city'] as String,
+            value: ((row['submission_count'] ?? 0) as num).toDouble(),
+          ))
+      .toList();
 });
 
 /// Channel breakdown for a mission - accepts WidgetFilterParams for filtering
@@ -527,46 +439,25 @@ final supabase = ref.watch(sharedSupabaseProvider);
         .toList();
   }
 
-  var query = supabase
-      .from('submission_answers')
-      .select('submission_id, channel')
-      .eq('mission_id', params.missionId)
-      .eq('qa_status', 'accepted')
-      .not('channel', 'is', null);
+  // Server-side aggregation: PostgREST caps responses at 1,000 rows, so
+  // client-side counting over raw answer rows silently undercounts.
+  final regionCities = await citiesForRegionFilter(ref, params);
+  final rpcResponse =
+      await supabase.rpc('fn_channel_breakdown_filtered', params: {
+    'p_mission_id': params.missionId,
+    'p_city': params.city,
+    'p_cities': regionCities,
+    'p_channel': params.channel,
+    'p_start_date': params.startDate?.toIso8601String().split('T')[0],
+    'p_end_date': params.endDate?.toIso8601String().split('T')[0],
+  });
 
-  if (params.city != null) {
-    query = query.eq('city', params.city!);
-  }
-  if (params.channel != null) {
-    query = query.eq('channel', params.channel!);
-  }
-  if (params.startDate != null) {
-    query = query.gte(
-        'observed_date', params.startDate!.toIso8601String().split('T')[0]);
-  }
-  if (params.endDate != null) {
-    query = query.lte(
-        'observed_date', params.endDate!.toIso8601String().split('T')[0]);
-  }
-
-  final response = await query;
-  final data = response as List;
-
-  // Group by channel and count unique submissions
-  final channelMap = <String, Set<String>>{};
-  for (final row in data) {
-    final channel = row['channel'] as String?;
-    final submissionId = row['submission_id'] as String?;
-    if (channel != null && submissionId != null) {
-      channelMap.putIfAbsent(channel, () => {}).add(submissionId);
-    }
-  }
-
-  return channelMap.entries
-      .map((e) =>
-          ChartDataPoint(label: e.key, value: e.value.length.toDouble()))
-      .toList()
-    ..sort((a, b) => b.value.compareTo(a.value));
+  return (rpcResponse as List)
+      .map((row) => ChartDataPoint(
+            label: row['channel'] as String,
+            value: ((row['submission_count'] ?? 0) as num).toDouble(),
+          ))
+      .toList();
 });
 
 /// City values that fail the CITIES region lookup, with their visit counts.

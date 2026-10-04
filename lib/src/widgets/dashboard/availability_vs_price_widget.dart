@@ -1,102 +1,105 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
-import 'price_widget_shell.dart';
-import 'widget_filters_row.dart';
 import '../../data/price_monitor_provider.dart';
+import '../../data/widget_data_providers.dart';
 import '../../theme/admin_colors.dart';
 import '../../theme/admin_radius.dart';
-import '../../theme/admin_spacing.dart';
 import '../../theme/admin_typography.dart';
 
 /// Availability % (store-level, latest visit per store) joined with average
 /// observed price per SKU — flags products that are both scarce and priced
 /// above the median. Filters apply to BOTH sides of the join.
-class AvailabilityVsPriceWidget extends HookConsumerWidget {
-  final String missionId;
-  final String title;
-  final String? subtitle;
+///
+/// Rendered as the "Availability × Price" view inside
+/// AvailabilityAnalysisWidget (the standalone widget type was consolidated
+/// there, 2026-07-07); self-sizing like the other analysis views.
+class AvailabilityPriceListView extends ConsumerWidget {
+  final WidgetFilterParams params;
+  final bool showAll;
+  final VoidCallback onToggleShowAll;
+  final int previewRowCount;
 
-  const AvailabilityVsPriceWidget({
+  const AvailabilityPriceListView({
     super.key,
-    required this.missionId,
-    required this.title,
-    this.subtitle,
+    required this.params,
+    required this.showAll,
+    required this.onToggleShowAll,
+    this.previewRowCount = 8,
   });
+
+  /// Maps the shared widget filter state onto the price provider's params.
+  static PriceFilterParams priceParams(WidgetFilterParams params) =>
+      PriceFilterParams(
+        missionId: params.missionId,
+        city: params.city,
+        channel: params.channel,
+        company: params.company,
+        brand: params.brand,
+        package: params.package,
+        size: params.size,
+        startDate: params.startDate,
+        endDate: params.endDate,
+      );
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selectedCity = useState<String?>(null);
-    final selectedChannel = useState<String?>(null);
-    final startDate = useState<DateTime?>(null);
-    final endDate = useState<DateTime?>(null);
+    final rowsAsync = ref.watch(availabilityVsPriceProvider(priceParams(params)));
 
-    final hasFilters = selectedCity.value != null ||
-        selectedChannel.value != null ||
-        startDate.value != null ||
-        endDate.value != null;
-
-    final rowsAsync = ref.watch(
-      availabilityVsPriceProvider(PriceFilterParams(
-        missionId: missionId,
-        city: selectedCity.value,
-        channel: selectedChannel.value,
-        startDate: startDate.value,
-        endDate: endDate.value,
-      )),
-    );
-
-    return PriceWidgetShell(
-      title: title,
-      subtitle: subtitle,
-      child: Column(
-        children: [
-          WidgetFiltersRow(
-            missionId: missionId,
-            selectedCity: selectedCity.value,
-            selectedChannel: selectedChannel.value,
-            startDate: startDate.value,
-            endDate: endDate.value,
-            hasFilters: hasFilters,
-            onCityChanged: (v) => selectedCity.value = v,
-            onChannelChanged: (v) => selectedChannel.value = v,
-            onDateRangeChanged: (range) {
-              startDate.value = range?.start;
-              endDate.value = range?.end;
-            },
-            onClearAll: () {
-              selectedCity.value = null;
-              selectedChannel.value = null;
-              startDate.value = null;
-              endDate.value = null;
-            },
-          ),
-          const SizedBox(height: AdminSpacing.md),
-          Expanded(
-            child: PriceAsyncContent(
-              value: rowsAsync,
-              builder: (rows) {
-                if (rows.isEmpty) {
-                  return const PriceWidgetMessage(
-                    message: 'No availability data for this mission',
-                  );
-                }
-                return Column(
-                  children: [
-                    _Header(),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: rows.length,
-                        itemBuilder: (context, i) => _Row(row: rows[i]),
-                      ),
-                    ),
-                  ],
-                );
-              },
+    return rowsAsync.when(
+      loading: () => const Padding(
+        padding: EdgeInsets.symmetric(vertical: 48),
+        child: Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Center(
+          child: Text(
+            'Could not load availability/price data',
+            style: AdminTextStyles.bodySmall.copyWith(
+              color: AdminColors.textMuted,
             ),
           ),
-        ],
+        ),
       ),
+      data: (rows) {
+        if (rows.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Text(
+                'No availability data for this mission',
+                style: AdminTextStyles.bodySmall.copyWith(
+                  color: AdminColors.textMuted,
+                ),
+              ),
+            ),
+          );
+        }
+        final visible = showAll ? rows : rows.take(previewRowCount).toList();
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _Header(),
+            ...visible.map((row) => _Row(row: row)),
+            if (rows.length > previewRowCount)
+              Align(
+                alignment: Alignment.center,
+                child: TextButton.icon(
+                  onPressed: onToggleShowAll,
+                  icon: Icon(
+                    showAll ? Icons.expand_less : Icons.expand_more,
+                    size: 18,
+                  ),
+                  label: Text(
+                    showAll
+                        ? 'Show top $previewRowCount'
+                        : 'Show all ${rows.length} rows',
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:hooks_riverpod/hooks_riverpod.dart';
 import 'price_sku_picker.dart';
 import 'price_widget_shell.dart';
 import '../../data/anchor_prices_provider.dart';
+import 'export_button.dart';
 import '../../data/price_monitor_provider.dart';
 import '../../theme/admin_colors.dart';
 import '../../theme/admin_spacing.dart';
@@ -53,6 +54,22 @@ class PriceComparisonWidget extends HookConsumerWidget {
     return PriceWidgetShell(
       title: title,
       subtitle: subtitle,
+      trailing: ExportButton(
+        baseName: 'price_comparison',
+        buildData: () async {
+          final stats = await ref.read(priceComparisonProvider(params).future);
+          return CsvExportData(
+            header: const ['Group', 'Avg Price (EGP)', 'Observations'],
+            rows: stats
+                .map((s) => <Object?>[
+                      s.label,
+                      s.avgPrice.toStringAsFixed(2),
+                      s.observationCount,
+                    ])
+                .toList(),
+          );
+        },
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
