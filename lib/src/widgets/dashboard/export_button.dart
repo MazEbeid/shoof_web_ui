@@ -3,8 +3,11 @@ import 'dart:html' as html;
 
 import 'package:flutter/material.dart';
 
+import '../../data/csv_format.dart';
 import '../../theme/admin_colors.dart';
 import '../../theme/admin_radius.dart';
+
+export '../../data/csv_format.dart' show csvLine;
 
 /// Header + rows for a CSV export.
 class CsvExportData {
@@ -14,28 +17,23 @@ class CsvExportData {
   const CsvExportData({required this.header, required this.rows});
 }
 
-String _escapeCsv(String value) {
-  if (value.contains(',') ||
-      value.contains('"') ||
-      value.contains('\n') ||
-      value.contains('\r')) {
-    return '"${value.replaceAll('"', '""')}"';
-  }
-  return value;
-}
-
 /// Builds a CSV and triggers a browser download.
 ///
 /// The file starts with a UTF-8 BOM so Excel detects the encoding — without
 /// it Arabic SKU/city names open garbled. Filename: `<baseName>_YYYY-MM-DD.csv`.
 void downloadCsv(String baseName, CsvExportData data) {
-  final buffer = StringBuffer('﻿');
-  buffer.writeln(data.header.map(_escapeCsv).join(','));
+  final buffer = StringBuffer();
+  buffer.writeln(csvLine(data.header));
   for (final row in data.rows) {
-    buffer.writeln(row.map((cell) => _escapeCsv(cell?.toString() ?? '')).join(','));
+    buffer.writeln(csvLine(row));
   }
+  downloadCsvContent(baseName, buffer.toString());
+}
 
-  final bytes = utf8.encode(buffer.toString());
+/// Downloads already-built CSV text (built with [csvLine]) — for exports too
+/// large to hold as a [CsvExportData]. Adds the BOM; same filename scheme.
+void downloadCsvContent(String baseName, String csv) {
+  final bytes = utf8.encode('\uFEFF$csv');
   final blob = html.Blob([bytes], 'text/csv');
   final url = html.Url.createObjectUrlFromBlob(blob);
   final date = DateTime.now().toIso8601String().split('T')[0];
@@ -97,11 +95,14 @@ class ExportButton extends StatelessWidget {
         'Export',
         style: TextStyle(color: AdminColors.primary),
       ),
-      style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        backgroundColor: AdminColors.primary.withValues(alpha: 0.1),
-        shape: RoundedRectangleBorder(borderRadius: AdminRadius.smAll),
-      ),
+      style: exportButtonStyle(),
     );
   }
 }
+
+/// The tinted look of [ExportButton], for sibling export controls.
+ButtonStyle exportButtonStyle() => TextButton.styleFrom(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      backgroundColor: AdminColors.primary.withValues(alpha: 0.1),
+      shape: RoundedRectangleBorder(borderRadius: AdminRadius.smAll),
+    );

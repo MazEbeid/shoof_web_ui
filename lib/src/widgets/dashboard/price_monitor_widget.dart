@@ -3,6 +3,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:hooks_riverpod/hooks_riverpod.dart';
 
 import 'export_button.dart';
+import 'price_matrix_export_dialog.dart';
 import 'price_vs_anchor_widget.dart' show showAnchorEditorDialog;
 import 'sku_filter_bar.dart';
 import '../../data/anchor_prices_provider.dart';
@@ -118,6 +119,18 @@ class PriceMonitorWidget extends HookConsumerWidget {
                     }).toList(),
                   );
                 },
+              ),
+              const SizedBox(width: AdminSpacing.sm),
+              TextButton.icon(
+                onPressed: () => showPriceMatrixExportDialog(context,
+                    filters: filterParams),
+                icon: Icon(Icons.table_view,
+                    size: 18, color: AdminColors.primary),
+                label: Text(
+                  'Export Price Matrix',
+                  style: TextStyle(color: AdminColors.primary),
+                ),
+                style: exportButtonStyle(),
               ),
               const SizedBox(width: AdminSpacing.sm),
               rowsAsync.when(

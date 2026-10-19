@@ -51,6 +51,7 @@ export 'src/data/widget_data_providers.dart';
 export 'src/data/anchor_prices_provider.dart';
 export 'src/data/price_monitor_provider.dart';
 export 'src/data/missed_opps_provider.dart';
+export 'src/data/price_matrix_export.dart';
 
 // Dashboard widgets (rendered by both ShooofAdmin and shoof_insights)
 export 'src/widgets/dashboard/price_widget_shell.dart';
@@ -63,6 +64,7 @@ export 'src/widgets/dashboard/price_vs_anchor_widget.dart';
 export 'src/widgets/dashboard/price_today_widget.dart';
 export 'src/widgets/dashboard/price_comparison_widget.dart';
 export 'src/widgets/dashboard/price_monitor_widget.dart';
+export 'src/widgets/dashboard/price_matrix_export_dialog.dart';
 export 'src/widgets/dashboard/raw_data_widget.dart';
 export 'src/widgets/dashboard/availability_vs_price_widget.dart';
 export 'src/widgets/dashboard/availability_analysis_widget.dart';
