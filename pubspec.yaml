@@ -1,6 +1,6 @@
 name: shoof_web_ui
 description: Shared UI components for Shoof web applications (Admin, Insights)
-version: 1.0.0
+version: 1.0.1
 publish_to: 'none'
 
 environment:
